@@ -1,0 +1,8 @@
+[2026-06-11 14:45:35 UTC] ICON sync: no source for com.runlevel.statshub
+[2026-06-11 14:45:35 UTC] Monitor started (NAS Admin dash sources)
+[2026-06-11 14:45:35 UTC] Stats Hub 0.1.0 starting
+[2026-06-27 15:19:20 UTC] ICON sync: no source for com.runlevel.statshub
+[2026-06-27 15:19:20 UTC] Disk/RAID monitor started
+[2026-06-27 15:19:20 UTC] Monitor started (light tick 3.0s, df ~60s)
+[2026-06-27 15:19:20 UTC] Stats Hub 0.2.18 starting on :29125
+[2026-06-27 15:19:20 UTC] Storage refresh: 5 disk temps

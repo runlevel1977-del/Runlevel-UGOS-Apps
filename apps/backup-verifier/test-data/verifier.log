@@ -1,0 +1,5 @@
+[2026-06-08 15:15:03 UTC] Backup Verifier Web-UI started
+[2026-06-08 15:15:05 UTC] JOB saved: t | Dieses NAS · Volume 1 (gesamt) <=> Dieses NAS · Volume 2 (gesamt)
+[2026-06-08 15:15:05 UTC] JOB t START
+[2026-06-08 15:15:05 UTC] COMPARE Dieses NAS · Volume 1 (gesamt) <=> Dieses NAS · Volume 2 (gesamt)
+[2026-06-08 15:15:05 UTC] JOB 3edc29a18037 FAIL: Referenzordner nicht gefunden.

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "3edc29a18037",
+    "name": "t",
+    "source": {
+      "device_id": "local",
+      "path": "",
+      "volume": "1"
+    },
+    "dest": {
+      "device_id": "local",
+      "path": "",
+      "volume": "2"
+    },
+    "last_run": "2026-06-08T15:15:05.203069+00:00",
+    "last_status": "fail",
+    "last_message": "Referenzordner nicht gefunden.",
+    "last_details": {
+      "tail": "Kein Speicher verfügbar"
+    }
+  }
+]

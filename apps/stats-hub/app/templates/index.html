@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ t('app.title') }}</title>
+  <style>
+    :root { --bg:#0f1419; --card:#1a2332; --accent:#3b82f6; --accent2:#2d9f6f; --text:#e8eef4; --muted:#8fa3b8; --border:#334; --warn:#e8a060; }
+    * { box-sizing:border-box; }
+    body { font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); margin:0; padding:1.25rem; }
+    h1 { color:var(--accent); margin:0 0 .25rem; }
+    h2 { font-size:1.05rem; margin:0 0 .75rem; color:var(--muted); }
+    .card { background:var(--card); border-radius:10px; padding:1rem 1.25rem; margin-bottom:1rem; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:1rem; }
+    .metric-label { font-size:.8rem; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+    .metric-val { font-size:1.6rem; font-weight:700; margin:.15rem 0 .5rem; }
+    .metric-sub { font-size:.78rem; color:var(--muted); }
+    .progress-track { height:10px; background:#0a0e12; border-radius:5px; overflow:hidden; border:1px solid var(--border); margin:.35rem 0; }
+    .progress-fill { height:100%; background:var(--accent); width:0%; transition:width .4s ease; border-radius:4px; }
+    .progress-fill.ram { background:#8b5cf6; }
+    .progress-fill.vol { background:var(--accent2); }
+    .progress-fill.warn { background:var(--warn); }
+    .progress-fill.danger { background:#dc2626; }
+    table { width:100%; border-collapse:collapse; font-size:.85rem; }
+    th,td { text-align:left; padding:.4rem; border-bottom:1px solid var(--border); vertical-align:top; }
+    .vol-row { margin-bottom:.65rem; }
+    .vol-path { font-size:.82rem; font-weight:600; }
+    .vol-meta { font-size:.75rem; color:var(--muted); }
+    .docker-led { color:#4ade80; }
+    .docker-stopped { color:var(--muted); }
+    .iface-down { opacity:.65; }
+    .iface-badge { font-size:.7rem; padding:.1rem .35rem; border-radius:4px; background:#2a3545; margin-left:.35rem; }
+    .iface-badge.up { background:#1a3d2e; color:#4ade80; }
+    .iface-badge.down { background:#3d2a1a; color:var(--warn); }
+    .iface-badge.def { background:#1e3a5f; color:#93c5fd; }
+    .health-ok { color:#4ade80; }
+    .health-warn { color:var(--warn); }
+    .health-bad { color:#f87171; }
+    .app-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:.75rem; }
+    .app-card { background:#0a0e12; border:1px solid var(--border); border-radius:8px; padding:.75rem; }
+    .app-card.offline { opacity:.7; }
+    .app-card h3 { margin:0 0 .35rem; font-size:.95rem; }
+    .app-card a { color:var(--accent2); font-size:.8rem; text-decoration:none; }
+    .app-card a:hover { text-decoration:underline; }
+    .tag-rl { font-size:.65rem; background:#1e3a5f; color:#93c5fd; padding:.1rem .3rem; border-radius:3px; margin-left:.25rem; }
+    button { background:var(--accent2); color:#fff; border:none; padding:.4rem .85rem; border-radius:6px; cursor:pointer; font-size:.88rem; }
+    button.secondary { background:#445; }
+    .disk-settings { display:flex; flex-wrap:wrap; gap:.65rem 1rem; align-items:center; margin:.35rem 0 .65rem; font-size:.82rem; }
+    .disk-settings label { display:flex; align-items:center; gap:.35rem; color:var(--muted); }
+    .disk-settings select { background:#0a0e12; color:var(--text); border:1px solid var(--border); border-radius:6px; padding:.25rem .4rem; }
+    .disk-settings input[type=checkbox] { accent-color:var(--accent2); }
+    #disk-settings-status { font-size:.78rem; color:var(--accent2); min-width:5rem; }
+    pre { background:#0a0e12; padding:.75rem; overflow:auto; max-height:140px; font-size:.75rem; border-radius:6px; }
+    .page-header { display:flex; flex-wrap:wrap; justify-content:space-between; gap:1rem; margin-bottom:.75rem; }
+    .hint { font-size:.85rem; color:var(--muted); margin:0; }
+    .lang-switch button { background:#2a3545; color:var(--muted); margin-left:.25rem; min-width:2.5rem; }
+    .lang-switch button.active { background:var(--accent2); color:#fff; }
+    .spark { height:36px; display:flex; align-items:flex-end; gap:1px; margin-top:.35rem; }
+    .spark i { flex:1; background:var(--accent); opacity:.75; border-radius:1px 1px 0 0; min-height:2px; }
+    .spark.ram i { background:#8b5cf6; }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <div>
+      <h1>{{ t('app.title') }}</h1>
+      <p class="hint">v{{ version }} — {{ t('app.intro') }}</p>
+      <p class="hint" id="data-source"></p>
+      <p class="hint">{{ t('companion') }} <a href="{{ nas_admin_url }}" style="color:var(--accent2)">Ugreen NAS Admin</a></p>
+    </div>
+    <div class="lang-switch">
+      <span class="hint">{{ t('ui.language') }}</span>
+      <button type="button" class="{% if lang == 'de' %}active{% endif %}" onclick="setLang('de')">DE</button>
+      <button type="button" class="{% if lang == 'en' %}active{% endif %}" onclick="setLang('en')">EN</button>
+    </div>
+  </header>
+
+  <div class="card">
+    <h2>{{ t('hw.title') }}</h2>
+    <div class="grid">
+      <div>
+        <div class="metric-label">{{ t('hw.cpu') }}</div>
+        <div class="metric-val" id="cpu-val">—</div>
+        <div class="progress-track"><div class="progress-fill" id="cpu-bar"></div></div>
+        <div class="spark" id="cpu-spark"></div>
+        <div class="metric-sub" id="cpu-sub"></div>
+      </div>
+      <div>
+        <div class="metric-label">{{ t('hw.ram') }}</div>
+        <div class="metric-val" id="ram-val">—</div>
+        <div class="progress-track"><div class="progress-fill ram" id="ram-bar"></div></div>
+        <div class="spark ram" id="ram-spark"></div>
+      </div>
+      <div>
+        <div class="metric-label">{{ t('hw.temp') }} / {{ t('hw.load') }}</div>
+        <div class="metric-val" id="temp-val">—</div>
+        <div class="metric-sub" id="load-val">—</div>
+      </div>
+      <div>
+        <div class="metric-label">{{ t('hw.fan') }}</div>
+        <div class="metric-sub" id="fan-val">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('ugos.title') }}</h2>
+    <p class="hint">{{ t('ugos.hint') }}</p>
+    <div class="disk-settings">
+      <label><input type="checkbox" id="ugos-enabled" /> {{ t('ugos.enabled') }}</label>
+      <label>{{ t('ugos.host') }} <input type="text" id="ugos-host" size="14" style="background:#0a0e12;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.2rem .35rem" /></label>
+      <label>{{ t('ugos.port') }} <input type="number" id="ugos-port" min="1" max="65535" size="6" style="background:#0a0e12;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.2rem .35rem" /></label>
+      <label>{{ t('ugos.user') }} <input type="text" id="ugos-user" size="12" autocomplete="username" style="background:#0a0e12;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.2rem .35rem" /></label>
+      <label>{{ t('ugos.password') }} <input type="password" id="ugos-password" size="12" placeholder="{{ t('ugos.password_placeholder') }}" autocomplete="current-password" style="background:#0a0e12;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.2rem .35rem" /></label>
+      <label><input type="checkbox" id="ugos-https" /> {{ t('ugos.https') }}</label>
+      <label><input type="checkbox" id="ugos-verify" /> {{ t('ugos.verify_ssl') }}</label>
+      <button type="button" onclick="saveUgosSettings()">{{ t('ugos.save') }}</button>
+      <span id="ugos-settings-status"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('storage.title') }}</h2>
+    <div class="grid">
+      <div>
+        <div class="metric-label">{{ t('storage.raid') }}</div>
+        <div id="raid-list" class="metric-sub"></div>
+      </div>
+      <div>
+        <div class="metric-label">{{ t('storage.disks') }}</div>
+        <div class="disk-settings">
+          <label>{{ t('storage.poll_interval') }}
+            <select id="disk-poll-interval">
+              <option value="15">{{ t('storage.poll_15s') }}</option>
+              <option value="30">{{ t('storage.poll_30s') }}</option>
+              <option value="60">{{ t('storage.poll_60s') }}</option>
+              <option value="120">{{ t('storage.poll_120s') }}</option>
+              <option value="300">{{ t('storage.poll_300s') }}</option>
+              <option value="600">{{ t('storage.poll_600s') }}</option>
+              <option value="1800">{{ t('storage.poll_1800s') }}</option>
+            </select>
+          </label>
+          <label title="{{ t('storage.skip_standby_hint') }}">
+            <input type="checkbox" id="disk-skip-standby" />
+            {{ t('storage.skip_standby') }}
+          </label>
+          <button type="button" class="secondary" onclick="saveDiskSettings()">{{ t('storage.save') }}</button>
+          <span id="disk-settings-status"></span>
+        </div>
+        <p class="hint" id="disk-hint" style="margin:.2rem 0 .45rem"></p>
+        <table>
+          <thead><tr><th>{{ t('storage.col_drive') }}</th><th>°C</th><th>{{ t('storage.col_slot') }}</th></tr></thead>
+          <tbody id="disk-tb"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>{{ t('vol.title') }}</h2>
+      <div id="vol-list"></div>
+    </div>
+    <div class="card">
+      <h2>{{ t('net.title') }}</h2>
+      <div id="net-list"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('apps.title') }}</h2>
+    <div class="app-grid" id="apps-grid"></div>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('docker.title') }}</h2>
+    <p class="hint" id="docker-df"></p>
+    <table>
+      <thead><tr><th></th><th>Name</th><th>Status</th><th>{{ t('docker.health') }}</th><th>CPU</th><th>RAM</th></tr></thead>
+      <tbody id="docker-tb"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('proc.title') }}</h2>
+    <table>
+      <thead><tr><th>PID</th><th>{{ t('proc.col_cpu') }}</th><th>{{ t('proc.col_mem') }}</th><th>{{ t('proc.col_cmd') }}</th></tr></thead>
+      <tbody id="proc-tb"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('top.title') }} <button type="button" class="secondary" onclick="scanTop()">{{ t('top.scan') }}</button></h2>
+    <p class="hint" id="top-status"></p>
+    <table>
+      <thead><tr><th>{{ t('top.col_path') }}</th><th>{{ t('top.col_gb') }}</th></tr></thead>
+      <tbody id="top-tb"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('os.title') }}</h2>
+    <div id="os-info" class="metric-sub"></div>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('log.title') }}</h2>
+    <pre id="log"></pre>
+  </div>
+
+  <script>
+    const LANG = {{ lang|tojson }};
+  </script>
+  <script>
+    const I18N = {{ i18n|tojson }};
+    const T = (k, fmt) => {
+      let s = I18N[k] || k;
+      if (fmt) {
+        for (const [key, val] of Object.entries(fmt)) {
+          s = s.split('{' + key + '}').join(String(val));
+        }
+      }
+      return s;
+    };
+    function setBar(el, pct) {
+      if (!el) return;
+      const p = Math.max(0, Math.min(100, pct || 0));
+      el.style.width = p + '%';
+      el.classList.toggle('warn', p >= 80 && p < 92);
+      el.classList.toggle('danger', p >= 92);
+    }
+    function renderSpark(box, arr) {
+      if (!box || !arr || !arr.length) { box.innerHTML = ''; return; }
+      const max = Math.max(...arr, 1);
+      box.innerHTML = arr.slice(-40).map(v =>
+        `<i style="height:${Math.max(4, Math.round((v/max)*100))}%"></i>`).join('');
+    }
+    function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+    function healthCls(h) {
+      if (h === 'bad' || h === 'unhealthy') return 'health-bad';
+      if (h === 'warn' || h === 'starting') return 'health-warn';
+      if (h === 'ok' || h === 'healthy') return 'health-ok';
+      if (h === 'standby') return 'hint';
+      return '';
+    }
+    function appUrl(port) {
+      return `${location.protocol}//${location.hostname}:${port}/`;
+    }
+    let diskSettingsTouched = false;
+    let ugosSettingsTouched = false;
+    document.getElementById('disk-poll-interval').addEventListener('change', () => { diskSettingsTouched = true; });
+    document.getElementById('disk-skip-standby').addEventListener('change', () => { diskSettingsTouched = true; });
+    ['ugos-enabled','ugos-host','ugos-port','ugos-user','ugos-password','ugos-https','ugos-verify'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', () => { ugosSettingsTouched = true; });
+      if (el && el.tagName === 'INPUT' && el.type !== 'checkbox') el.addEventListener('input', () => { ugosSettingsTouched = true; });
+    });
+
+    function applyUgosSettings(ds) {
+      if (!ds || !ds.ugos_api || ugosSettingsTouched) return;
+      const u = ds.ugos_api;
+      document.getElementById('ugos-enabled').checked = !!u.enabled;
+      document.getElementById('ugos-host').value = u.host || '127.0.0.1';
+      document.getElementById('ugos-port').value = u.port || 9443;
+      document.getElementById('ugos-user').value = u.username || '';
+      document.getElementById('ugos-https').checked = u.use_https !== false;
+      document.getElementById('ugos-verify').checked = !!u.verify_ssl;
+    }
+
+    async function saveUgosSettings() {
+      const status = document.getElementById('ugos-settings-status');
+      status.textContent = '';
+      const body = {
+        ugos_api: {
+          enabled: document.getElementById('ugos-enabled').checked,
+          host: document.getElementById('ugos-host').value.trim(),
+          port: parseInt(document.getElementById('ugos-port').value, 10) || 9443,
+          username: document.getElementById('ugos-user').value.trim(),
+          use_https: document.getElementById('ugos-https').checked,
+          verify_ssl: document.getElementById('ugos-verify').checked,
+        },
+      };
+      const pw = document.getElementById('ugos-password').value;
+      if (pw) body.ugos_api.password = pw;
+      try {
+        const r = await fetch('/api/settings', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body),
+        });
+        const j = await r.json();
+        if (j.ok) {
+          ugosSettingsTouched = false;
+          document.getElementById('ugos-password').value = '';
+          applyUgosSettings(j.settings);
+          status.textContent = T('ugos.saved');
+          poll();
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    function applyDiskSettings(ds) {
+      if (!ds || diskSettingsTouched) return;
+      const sel = document.getElementById('disk-poll-interval');
+      const iv = String(ds.disk_poll_interval_sec || 15);
+      if ([...sel.options].some(o => o.value === iv)) sel.value = iv;
+      document.getElementById('disk-skip-standby').checked = !!ds.disk_skip_standby;
+    }
+
+    async function saveDiskSettings() {
+      const status = document.getElementById('disk-settings-status');
+      status.textContent = '';
+      const body = {
+        disk_poll_interval_sec: parseInt(document.getElementById('disk-poll-interval').value, 10),
+        disk_skip_standby: document.getElementById('disk-skip-standby').checked,
+      };
+      try {
+        const r = await fetch('/api/settings', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body),
+        });
+        const j = await r.json();
+        if (j.ok) {
+          diskSettingsTouched = false;
+          applyDiskSettings(j.settings);
+          status.textContent = T('storage.saved');
+          poll();
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    function renderSnap(s) {
+      const srcEl = document.getElementById('data-source');
+      if (srcEl) {
+        srcEl.textContent = s && s.data_source === 'ugos' ? T('ugos.source_active') : T('ugos.source_host');
+        if (s && s.ugos_error && s.data_source !== 'ugos') {
+          srcEl.textContent += ' — ' + T('ugos.error', {msg: s.ugos_error});
+        }
+      }
+      const hostOffline = !s || !s.ok;
+      if (hostOffline) {
+        const cpuEl = document.getElementById('cpu-val');
+        if (cpuEl && (s && (s.cpu != null || s.ram != null))) {
+          cpuEl.textContent = T('status.waiting');
+        } else if (cpuEl) {
+          cpuEl.textContent = T('status.offline');
+        }
+      }
+      const cpu = s && s.cpu, ram = s && s.ram;
+      if (!s) return;
+      document.getElementById('cpu-val').textContent = cpu != null ? cpu.toFixed(1) + '%' : '—';
+      document.getElementById('ram-val').textContent = ram != null ? ram.toFixed(1) + '%' : '—';
+      setBar(document.getElementById('cpu-bar'), cpu);
+      setBar(document.getElementById('ram-bar'), ram);
+      renderSpark(document.getElementById('cpu-spark'), (s.history||{}).cpu);
+      renderSpark(document.getElementById('ram-spark'), (s.history||{}).ram);
+      document.getElementById('cpu-sub').textContent = s.load ? (T('hw.load') + ': ' + s.load) : '';
+      document.getElementById('temp-val').textContent = s.cpu_temp_c != null ? s.cpu_temp_c.toFixed(0) + ' °C' : '—';
+      document.getElementById('load-val').textContent = s.load ? (T('hw.load') + ': ' + s.load) : '—';
+      const fans = (s.fans||[]).map(f => f.label + ': ' + f.rpm + ' rpm').join(' · ');
+      const fc = s.fan_count || (s.fans||[]).length;
+      document.getElementById('fan-val').textContent = fans || T('hw.fan_none');
+      if (fc > 0) document.getElementById('fan-val').textContent += ' (' + fc + ')';
+      const raidEl = document.getElementById('raid-list');
+      const raid = s.raid || {};
+      const arrays = raid.arrays || [];
+      if (!arrays.length) {
+        raidEl.innerHTML = `<span class="hint">${esc(T('storage.raid_none'))}</span>`;
+      } else {
+        raidEl.innerHTML = arrays.map(a => {
+          const cls = healthCls(a.health);
+          return `<div class="vol-row"><span class="${cls}">${esc(a.name)}</span> — ${esc(a.state)} ${esc(a.status||'')}</div>`;
+        }).join('');
+      }
+      applyDiskSettings(s.disk_settings);
+      applyUgosSettings(s.disk_settings);
+      const diskHint = document.getElementById('disk-hint');
+      const du = s.disk_temps_updated;
+      if (du) {
+        const ago = Math.max(0, Math.floor(Date.now() / 1000) - du);
+        diskHint.textContent = T('storage.disks_hint') + ' ' + T('storage.disks_updated', {sec: ago});
+      } else {
+        diskHint.textContent = T('storage.disks_hint');
+      }
+      const dtb = document.getElementById('disk-tb');
+      dtb.innerHTML = '';
+      const disks = s.disk_temps || [];
+      if (!disks.length) {
+        dtb.innerHTML = `<tr><td colspan="3">${esc(T('storage.disks_none'))}</td></tr>`;
+      } else {
+        disks.forEach(d => {
+          const tr = document.createElement('tr');
+          const title = esc(d.label || d.model || d.name || d.device);
+          const tran = d.tran ? `<span class="iface-badge def">${esc(d.tran)}</span>` : '';
+          const slot = esc(d.name || (d.device || '').replace(/^\/dev\//, ''));
+          const tempTxt = d.standby ? T('storage.standby') : (d.temp_c != null ? d.temp_c : '—');
+          tr.innerHTML = `<td class="${healthCls(d.health)}">${title} ${tran}</td>
+            <td class="${healthCls(d.health)}">${esc(String(tempTxt))}</td>
+            <td class="hint">${slot}</td>`;
+          dtb.appendChild(tr);
+        });
+      }
+      const appsEl = document.getElementById('apps-grid');
+      appsEl.innerHTML = '';
+      (s.runlevel_apps||[]).forEach(a => {
+        const card = document.createElement('div');
+        card.className = 'app-card' + (a.online ? '' : ' offline');
+        const stCls = healthCls(a.status);
+        const ver = a.version ? `v${esc(a.version)}` : '';
+        const selfTag = a.is_self ? `<span class="tag-rl">${esc(T('apps.self'))}</span>` : '';
+        const link = a.online
+          ? `<a href="${esc(appUrl(a.port))}" target="_blank" rel="noopener">${esc(T('apps.open'))}</a>`
+          : `<span class="hint">${esc(T('apps.offline'))}</span>`;
+        card.innerHTML = `<h3><span class="${stCls}">${esc(a.name)}</span> <span class="hint">${ver}</span> ${selfTag}</h3>
+          <div class="vol-meta">${esc(a.summary||'—')}</div>
+          <div class="vol-meta">${esc(a.detail||'')}</div>
+          <div style="margin-top:.4rem">${link}</div>`;
+        appsEl.appendChild(card);
+      });
+      const volEl = document.getElementById('vol-list');
+      volEl.innerHTML = '';
+      (s.volumes||[]).forEach(v => {
+        const d = document.createElement('div');
+        d.className = 'vol-row';
+        d.innerHTML = `<div class="vol-path">${esc(v.path)}</div>
+          <div class="progress-track"><div class="progress-fill vol"></div></div>
+          <div class="vol-meta">${esc(v.used_h)} / ${esc(v.total_h)} (${v.pct}%)</div>`;
+        setBar(d.querySelector('.progress-fill'), v.pct);
+        volEl.appendChild(d);
+      });
+      const netEl = document.getElementById('net-list');
+      netEl.innerHTML = '';
+      (s.ifaces||[]).forEach(n => {
+        const d = document.createElement('div');
+        const st = (n.state || '').toLowerCase();
+        d.className = 'vol-row' + (st === 'down' ? ' iface-down' : '');
+        const addrs = (n.addrs||[]).length ? (n.addrs||[]).join(', ') : T('net.no_ip');
+        const stCls = st === 'up' ? 'up' : (st === 'down' ? 'down' : '');
+        const badges = [
+          st ? `<span class="iface-badge ${stCls}">${esc(n.state)}</span>` : '',
+          n.default_route ? `<span class="iface-badge def">${esc(T('net.default'))}</span>` : ''
+        ].filter(Boolean).join('');
+        const mac = n.mac ? `<div class="vol-meta">MAC ${esc(n.mac)}</div>` : '';
+        const gw = n.gateway ? `<div class="vol-meta">${esc(T('net.gateway'))}: ${esc(n.gateway)}</div>` : '';
+        d.innerHTML = `<div class="vol-path">${esc(n.name)} ${badges}</div>
+          <div class="vol-meta">↓ ${esc(n.rx_h||'—')} · ↑ ${esc(n.tx_h||'—')}</div>
+          <div class="vol-meta">${esc(addrs)}</div>${mac}${gw}`;
+        netEl.appendChild(d);
+      });
+      const df = s.docker_df || {};
+      const dfBits = ['images','containers','local_volumes','build_cache']
+        .filter(k => df[k]).map(k => `${k.replace(/_/g,' ')}: ${df[k]}`);
+      document.getElementById('docker-df').textContent = dfBits.length
+        ? (T('docker.df') + ': ' + dfBits.join(' · ')) : '';
+      const dockTb = document.getElementById('docker-tb');
+      dockTb.innerHTML = '';
+      const dk = s.docker || [];
+      if (!dk.length) {
+        dockTb.innerHTML = `<tr><td colspan="6">${esc(T('docker.empty'))}</td></tr>`;
+      } else {
+        dk.forEach(c => {
+          const tr = document.createElement('tr');
+          const led = c.running ? '<span class="docker-led">●</span>' : '<span class="docker-stopped">○</span>';
+          const rl = c.runlevel ? `<span class="tag-rl">${esc(T('docker.runlevel'))}</span>` : '';
+          const hl = c.health ? `<span class="${healthCls(c.health)}">${esc(c.health)}</span>` : '—';
+          tr.innerHTML = `<td>${led}</td><td>${esc(c.name)}${rl}</td><td><small>${esc(c.status)}</small></td>
+            <td>${hl}</td><td>${esc(c.cpu_live||'—')}</td><td>${esc(c.mem_live||'—')}</td>`;
+          dockTb.appendChild(tr);
+        });
+      }
+      const ptb = document.getElementById('proc-tb');
+      ptb.innerHTML = '';
+      const procs = s.processes || [];
+      if (!procs.length) {
+        ptb.innerHTML = `<tr><td colspan="4">${esc(T('proc.empty'))}</td></tr>`;
+      } else {
+        procs.forEach(p => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${p.pid}</td><td>${p.cpu}</td><td>${p.mem}</td><td><small>${esc(p.cmd)}</small></td>`;
+          ptb.appendChild(tr);
+        });
+      }
+      const topSt = document.getElementById('top-status');
+      topSt.textContent = s.top_scanning ? T('top.scanning') : '';
+      const ttb = document.getElementById('top-tb');
+      ttb.innerHTML = '';
+      const tops = s.top_folders || [];
+      if (!tops.length && !s.top_scanning) {
+        ttb.innerHTML = `<tr><td colspan="2">${esc(T('top.empty'))}</td></tr>`;
+      } else {
+        tops.forEach(r => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${esc(r.path)}</td><td>${r.gb}</td>`;
+          ttb.appendChild(tr);
+        });
+      }
+      const os = s.os || {};
+      document.getElementById('os-info').innerHTML = [
+        os.hostname, os.PRETTY_NAME || os.OS_VERSION, os.uptime ? ('↑ ' + os.uptime) : ''
+      ].filter(Boolean).map(esc).join(' · ');
+    }
+    async function poll() {
+      try {
+        const r = await fetch('/api/snapshot');
+        const j = await r.json();
+        renderSnap(j.snapshot);
+      } catch (e) { /* ignore */ }
+    }
+    async function scanTop() {
+      await fetch('/api/top/scan', { method: 'POST' });
+      poll();
+    }
+    async function loadLog() {
+      try {
+        const r = await fetch('/api/log');
+        const j = await r.json();
+        document.getElementById('log').textContent = j.log || '';
+      } catch (e) { /* ignore */ }
+    }
+    async function setLang(code) {
+      await fetch('/api/lang', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({lang: code}) });
+      location.reload();
+    }
+    poll();
+    loadLog();
+    setInterval(poll, 3000);
+    setInterval(loadLog, 8000);
+  </script>
+  {% include 'compliance_footer.html' %}
+</body>
+</html>

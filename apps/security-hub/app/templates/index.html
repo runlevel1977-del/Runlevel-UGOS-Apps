@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ t('app.title') }}</title>
+  <style>
+    :root { --bg:#0c101a; --card:#1a2332; --accent:#14b8a6; --ok:#2d9f6f; --bad:#c44; --text:#e8eef4; --muted:#8fa3b8; --border:#334; --note:#2a3548; }
+    body { font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); margin:0; padding:1.25rem; max-width:1100px; }
+    .page-header { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:.5rem; }
+    .page-header .title-block { flex:1; min-width:220px; }
+    .lang-switch { display:flex; align-items:center; gap:.35rem; flex-shrink:0; }
+    .lang-switch .lang-label { font-size:.8rem; color:var(--muted); margin-right:.25rem; }
+    .lang-switch button.lang-btn { background:#2a3545; color:var(--muted); margin:0; min-width:2.6rem; font-weight:600; }
+    .lang-switch button.lang-btn.active { background:var(--accent); color:#111; }
+    h1 { color:var(--accent); margin:0 0 .25rem; }
+    h2 { font-size:1.05rem; margin:0 0 .75rem; }
+    .card { background:var(--card); border-radius:10px; padding:1.25rem; margin-bottom:1rem; }
+    .hint { font-size:.85rem; color:var(--muted); line-height:1.45; }
+    .readonly-note { font-size:.85rem; color:var(--text); background:var(--note); border-left:3px solid var(--accent); padding:.65rem .85rem; border-radius:6px; margin:.75rem 0 0; line-height:1.45; }
+    button { background:var(--accent); color:#111; border:none; padding:.45rem .9rem; border-radius:6px; cursor:pointer; margin:.2rem .2rem .2rem 0; font-weight:600; }
+    button.secondary { background:#445; color:#fff; }
+    button:disabled { opacity:.55; cursor:not-allowed; }
+    input,select { padding:.45rem; border:1px solid var(--border); border-radius:6px; background:#0f1419; color:var(--text); }
+    table { width:100%; border-collapse:collapse; font-size:.82rem; }
+    th,td { text-align:left; padding:.4rem .45rem; border-bottom:1px solid var(--border); vertical-align:top; }
+    th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var(--card); }
+    tr:hover td { background:rgba(20,184,166,.06); }
+    .toolbar { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; margin-bottom:.75rem; }
+    .toolbar label { font-size:.85rem; color:var(--muted); display:flex; align-items:center; gap:.35rem; }
+    .status-line { font-size:.85rem; color:var(--accent); min-height:1.2rem; margin:.35rem 0; }
+    .outcome-ok { color:var(--ok); }
+    .outcome-failed { color:var(--bad); }
+    .outcome-session { color:var(--muted); }
+    td.access-cell { color:#b8e8df; max-width:280px; word-break:break-word; }
+    pre { background:#0a0e12; padding:.75rem; overflow:auto; max-height:220px; font-size:.78rem; white-space:pre-wrap; }
+    details.collapse-card > summary { cursor:pointer; font-weight:600; list-style:none; }
+    details.collapse-card > summary::before { content:'▸ '; color:var(--muted); }
+    details.collapse-card[open] > summary::before { content:'▾ '; }
+    .table-wrap { overflow-x:auto; max-height:min(70vh, 640px); overflow-y:auto; }
+    @media(max-width:700px){ table { font-size:.75rem; } }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <div class="title-block">
+      <h1>{{ t('app.title') }} <small style="color:var(--muted)">v{{ version }}</small></h1>
+      <p class="hint">{{ t('app.intro') }}<br>{{ t('app.mount_hint') }}</p>
+      <p class="readonly-note">{{ t('app.readonly_note') }}</p>
+      <p class="hint" style="margin-top:.65rem">{{ t('companion') }} <a href="{{ nas_admin_url }}" style="color:var(--accent)" target="_blank" rel="noopener">Ugreen NAS Admin</a></p>
+    </div>
+    <div class="lang-switch" role="group" aria-label="{{ t('ui.language') }}">
+      <span class="lang-label">{{ t('ui.language') }}</span>
+      <button type="button" class="lang-btn{% if lang == 'de' %} active{% endif %}" onclick="setLang('de')"{% if lang == 'de' %} aria-current="true"{% endif %}>DE</button>
+      <button type="button" class="lang-btn{% if lang == 'en' %} active{% endif %}" onclick="setLang('en')"{% if lang == 'en' %} aria-current="true"{% endif %}>EN</button>
+    </div>
+  </header>
+
+  <div class="card">
+    <div class="toolbar">
+      <button type="button" onclick="doRefresh()">{{ t('btn.refresh') }}</button>
+      <button type="button" class="secondary" onclick="exportEvents()">{{ t('btn.export') }}</button>
+      <label><input type="checkbox" id="liveChk" onchange="savePrefs()" checked /> {{ t('live.enable') }}</label>
+      <span class="hint" style="font-size:.8rem">{{ t('live.hint') }}</span>
+      <label><input type="checkbox" id="hidePingsChk" onchange="savePrefs()" /> {{ t('filter.hide_pings') }}</label>
+      <label>{{ t('days.label') }}
+        <select id="daysSel" onchange="savePrefs()">
+          <option value="7">7</option>
+          <option value="14">14</option>
+          <option value="30" selected>30</option>
+          <option value="60">60</option>
+          <option value="90">90</option>
+        </select>
+      </label>
+      <label>{{ t('sort.label') }}
+        <select id="sortBy" onchange="savePrefs()">
+          <option value="time">{{ t('sort.time') }}</option>
+          <option value="ip">{{ t('sort.ip') }}</option>
+          <option value="user">{{ t('sort.user') }}</option>
+          <option value="source">{{ t('sort.source') }}</option>
+          <option value="outcome">{{ t('sort.outcome') }}</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="sortDesc" onchange="savePrefs()" checked /> {{ t('sort.desc') }}</label>
+    </div>
+    <div class="status-line" id="statusLine"></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>{{ t('col.time') }}</th>
+            <th>{{ t('col.ip') }}</th>
+            <th>{{ t('col.source') }}</th>
+            <th>{{ t('col.outcome') }}</th>
+            <th>{{ t('col.user') }}</th>
+            <th>{{ t('col.access') }}</th>
+            <th>{{ t('col.detail') }}</th>
+          </tr>
+        </thead>
+        <tbody id="eventsBody"></tbody>
+      </table>
+    </div>
+    <p class="hint" id="emptyHint" style="display:none;margin-top:.75rem">{{ t('empty') }}</p>
+    <p class="hint" style="margin-top:.5rem;font-size:.8rem">{{ t('access.hint') }}</p>
+  </div>
+
+  <details class="card collapse-card" open>
+    <summary>{{ t('diag.title') }}</summary>
+    <pre id="diagPre">-</pre>
+  </details>
+
+  <details class="card collapse-card">
+    <summary>{{ t('log.title') }}</summary>
+    <pre id="logPre"></pre>
+  </details>
+
+<script>
+const I18N = {{ i18n | tojson }};
+let pollTimer = null;
+
+function tr(key, fmt) {
+  let s = I18N[key] || key;
+  if (fmt) for (const k of Object.keys(fmt)) s = s.replace('{' + k + '}', fmt[k]);
+  return s;
+}
+
+async function setLang(lang) {
+  const r = await fetch('/api/lang', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ lang }) });
+  if (r.ok) location.reload();
+}
+
+function outcomeClass(o) {
+  const x = (o || '').toLowerCase();
+  if (x === 'ok') return 'outcome-ok';
+  if (x === 'failed') return 'outcome-failed';
+  return 'outcome-session';
+}
+
+function renderEvents(data) {
+  const body = document.getElementById('eventsBody');
+  const events = data.events || [];
+  body.innerHTML = events.map(ev => `<tr>
+      <td>${ev.timestamp || '-'}</td>
+      <td>${ev.ip || '-'}</td>
+      <td>${ev.source || '-'}</td>
+      <td class="${outcomeClass(ev.outcome)}">${ev.outcome || '-'}</td>
+      <td>${ev.user || '-'}</td>
+      <td class="access-cell">${(ev.access || '—').replace(/</g,'&lt;')}</td>
+      <td>${(ev.detail || '').replace(/</g,'&lt;')}</td>
+    </tr>`).join('');
+  document.getElementById('emptyHint').style.display = events.length ? 'none' : 'block';
+  let status = '';
+  if (data.busy) status = tr('status.busy');
+  else if (data.live_waiting) status = tr('status.live_waiting');
+  else if (data.error) status = data.error;
+  else if (events.length) status = tr('status.entries', { count: events.length });
+  document.getElementById('statusLine').textContent = status;
+  document.getElementById('diagPre').textContent = (data.diag || []).join('\n') || '-';
+}
+
+async function loadConfig() {
+  const r = await fetch('/api/config');
+  const j = await r.json();
+  if (!j.ok) return;
+  document.getElementById('liveChk').checked = !!j.live_enabled;
+  document.getElementById('hidePingsChk').checked = !!j.hide_pings;
+  document.getElementById('daysSel').value = String(j.days || 30);
+  document.getElementById('sortBy').value = j.sort_by || 'time';
+  document.getElementById('sortDesc').checked = !!j.sort_desc;
+}
+
+async function pollEvents() {
+  const r = await fetch('/api/events');
+  const j = await r.json();
+  if (j.ok) renderEvents(j);
+}
+
+async function savePrefs() {
+  const body = {
+    live_enabled: document.getElementById('liveChk').checked,
+    hide_pings: document.getElementById('hidePingsChk').checked,
+    days: parseInt(document.getElementById('daysSel').value, 10),
+    sort_by: document.getElementById('sortBy').value,
+    sort_desc: document.getElementById('sortDesc').checked,
+  };
+  const r = await fetch('/api/prefs', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (j.ok) renderEvents(j);
+}
+
+async function doRefresh() {
+  document.getElementById('statusLine').textContent = tr('status.loading');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 120000);
+  try {
+    const r = await fetch('/api/refresh', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({}),
+      signal: ctrl.signal,
+    });
+    const j = await r.json();
+    if (j.ok) renderEvents(j);
+    else {
+      document.getElementById('statusLine').textContent = j.error || tr('status.collect_empty');
+      if (j.diag) document.getElementById('diagPre').textContent = (j.diag || []).join('\n') || '-';
+      renderEvents(j);
+    }
+  } catch (e) {
+    document.getElementById('statusLine').textContent = tr('status.busy');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function exportEvents() {
+  const rows = [...document.querySelectorAll('#eventsBody tr')];
+  if (!rows.length) { alert(tr('export.empty')); return; }
+  const lines = ['Time | IP | Source | Outcome | User | Access | Detail', '-'.repeat(90)];
+  rows.forEach(row => {
+    const cells = [...row.querySelectorAll('td')].map(td => td.textContent.trim());
+    lines.push(cells.join(' | '));
+  });
+  const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'security-hub-export.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function loadLog() {
+  const r = await fetch('/api/log');
+  const j = await r.json();
+  if (j.ok) document.getElementById('logPre').textContent = j.text || '-';
+}
+
+async function boot() {
+  await loadConfig();
+  await pollEvents();
+  await loadLog();
+  pollTimer = setInterval(pollEvents, 5000);
+}
+
+boot();
+</script>
+  {% include 'compliance_footer.html' %}
+</body>
+</html>

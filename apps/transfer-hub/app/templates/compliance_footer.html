@@ -1,0 +1,39 @@
+<footer class="rl-compliance" style="margin-top:1.5rem;padding:.85rem 0;border-top:1px solid #334;font-size:.78rem;color:#8fa3b8;display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;">
+  <span>Runlevel</span>
+  <a href="{{ compliance_links.privacy }}" target="_blank" rel="noopener">Privacy</a>
+  <a href="{{ compliance_links.help }}" target="_blank" rel="noopener">Help</a>
+  <a href="{{ compliance_links.source }}" target="_blank" rel="noopener">Source</a>
+  <a href="{{ compliance_links.support_email }}">Support</a>
+  <a href="{{ compliance_links.issues }}" target="_blank" rel="noopener">Issues</a>
+</footer>
+
+<div id="rl-privacy-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;align-items:center;justify-content:center;padding:1rem;">
+  <div style="max-width:520px;background:#1a2332;color:#e8eef4;border-radius:10px;padding:1.25rem;border:1px solid #334;">
+    <h3 style="margin:0 0 .75rem;font-size:1rem;">Privacy notice</h3>
+    <p style="margin:0 0 1rem;font-size:.88rem;line-height:1.45;color:#8fa3b8;">
+      This app may store credentials or notification settings locally on your NAS.
+      Please read the <a id="rl-privacy-link" href="{{ compliance_links.privacy }}" target="_blank" rel="noopener" style="color:#3b82f6;">privacy policy</a>
+      before saving sensitive data.
+    </p>
+    <button type="button" id="rl-privacy-accept" style="background:#2d9f6f;color:#fff;border:none;padding:.45rem .9rem;border-radius:6px;cursor:pointer;">I agree</button>
+  </div>
+</div>
+<script>
+(function () {
+  const needs = {{ 'true' if privacy_consent_required else 'false' }};
+  const given = {{ 'true' if privacy_consent_given else 'false' }};
+  const modal = document.getElementById('rl-privacy-modal');
+  if (needs && !given && modal) {
+    modal.style.display = 'flex';
+    document.getElementById('rl-privacy-accept')?.addEventListener('click', async function () {
+      try {
+        const r = await fetch('/api/privacy/consent', { method: 'POST' });
+        if (r.ok) modal.style.display = 'none';
+      } catch (e) { /* ignore */ }
+    });
+  }
+  window.rlPrivacyOk = function () {
+    return !needs || given || (modal && modal.style.display === 'none');
+  };
+})();
+</script>

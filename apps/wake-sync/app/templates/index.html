@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ t('app.title') }}</title>
+  <style>
+    :root { --bg:#0f1419; --card:#1a2332; --accent:#e8a060; --ok:#2d9f6f; --bad:#c44; --text:#e8eef4; --muted:#8fa3b8; --border:#334; }
+    body { font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); margin:0; padding:1.25rem; max-width:960px; }
+    .page-header { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:.5rem; }
+    .page-header .title-block { flex:1; min-width:220px; }
+    .lang-switch { display:flex; align-items:center; gap:.35rem; flex-shrink:0; }
+    .lang-switch .lang-label { font-size:.8rem; color:var(--muted); margin-right:.25rem; }
+    .lang-switch button.lang-btn { background:#2a3545; color:var(--muted); margin:0; min-width:2.6rem; font-weight:600; }
+    .lang-switch button.lang-btn.active { background:var(--accent); color:#111; }
+    .lang-switch button.lang-btn:not(.active):hover { color:var(--text); }
+    h1 { color:var(--accent); margin:0 0 .25rem; }
+    h2 { font-size:1.05rem; margin:0 0 .75rem; }
+    .card { background:var(--card); border-radius:10px; padding:1.25rem; margin-bottom:1rem; }
+    .hint { font-size:.85rem; color:var(--muted); line-height:1.45; }
+    button { background:var(--accent); color:#111; border:none; padding:.45rem .9rem; border-radius:6px; cursor:pointer; margin:.2rem .2rem .2rem 0; font-weight:600; }
+    button.secondary { background:#445; color:#fff; }
+    button.ok { background:var(--ok); color:#fff; }
+    button.danger { background:var(--bad); color:#fff; }
+    input,select { padding:.45rem; border:1px solid var(--border); border-radius:6px; background:#0f1419; color:var(--text); }
+    table { width:100%; border-collapse:collapse; font-size:.88rem; }
+    th,td { text-align:left; padding:.45rem; border-bottom:1px solid var(--border); vertical-align:top; }
+    .pick { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.35rem 0; }
+    .sel { flex:1; min-width:180px; background:#0a0e12; padding:.4rem .6rem; border-radius:6px; border:1px solid var(--border); font-size:.85rem; }
+    .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:100; align-items:center; justify-content:center; padding:1rem; }
+    .modal.open { display:flex; }
+    .modal-box { background:var(--card); border-radius:12px; padding:1rem; max-width:560px; width:100%; max-height:80vh; overflow:auto; }
+    .modal-box.wide { max-width:640px; }
+    button.link { background:transparent; color:var(--accent); text-decoration:underline; padding:.2rem; font-weight:normal; }
+    .dir-list { list-style:none; padding:0; margin:.5rem 0; }
+    .dir-list li { padding:.35rem 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:.5rem; flex-wrap:wrap; }
+    .dir-list li .row-label { flex:1; min-width:120px; }
+    .dir-list li .row-actions { white-space:nowrap; }
+    pre { background:#0a0e12; padding:.75rem; overflow:auto; max-height:200px; font-size:.78rem; white-space:pre-wrap; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; max-width:520px; }
+    @media(max-width:600px){ .grid2 { grid-template-columns:1fr; } }
+    details.collapse-card > summary { cursor:pointer; font-weight:600; list-style:none; }
+    details.collapse-card > summary::before { content:'▸ '; color:var(--muted); }
+    details.collapse-card[open] > summary::before { content:'▾ '; }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <div class="title-block">
+      <h1>{{ t('app.title') }} <small style="color:var(--muted)">v{{ version }}</small></h1>
+      <p class="hint">{{ t('app.intro') }}<br>{{ t('app.wol_hint') }} <span id="wol-bc"></span></p>
+      <p class="hint">{{ t('companion') }} <a href="{{ nas_admin_url }}" style="color:var(--accent)" target="_blank" rel="noopener">Ugreen NAS Admin</a></p>
+    </div>
+    <div class="lang-switch" role="group" aria-label="{{ t('ui.language') }}">
+      <span class="lang-label">{{ t('ui.language') }}</span>
+      <button type="button" class="lang-btn{% if lang == 'de' %} active{% endif %}" onclick="setLang('de')"{% if lang == 'de' %} aria-current="true"{% endif %}>DE</button>
+      <button type="button" class="lang-btn{% if lang == 'en' %} active{% endif %}" onclick="setLang('en')"{% if lang == 'en' %} aria-current="true"{% endif %}>EN</button>
+    </div>
+  </header>
+
+  <div class="card">
+    <h2>{{ t('devices.target') }}</h2>
+    <p class="hint">{{ t('devices.setup_hint') }}</p>
+    <div class="pick">
+      <input id="dev-host" placeholder="{{ t('devices.host_ph') }}" style="min-width:160px" />
+      <input id="dev-name" placeholder="{{ t('modal.display_name') }}" />
+      <button type="button" class="secondary" onclick="openDevModal()">{{ t('devices.add') }}</button>
+    </div>
+    <table>
+      <thead><tr><th>{{ t('modal.display_name') }}</th><th>IP</th><th>{{ t('devices.col_mac') }}</th><th>{{ t('devices.col_cache') }}</th><th></th></tr></thead>
+      <tbody id="devices-body"></tbody>
+    </table>
+  </div>
+
+  <div class="card" id="plan-form-card">
+    <h2 id="planFormTitle">{{ t('plan.new') }}</h2>
+    <label>{{ t('plan.name') }}<br><input id="pname" style="width:100%;max-width:400px" placeholder="{{ t('plan.name_ph') }}" /></label>
+    <div class="grid2" style="margin-top:.5rem">
+      <label>{{ t('plan.run_at') }}<br><input type="time" id="runAt" value="12:30" /></label>
+      <label>{{ t('plan.ready_wait') }}<br><input type="number" id="readyWait" value="20" min="1" max="120" /></label>
+      <label>{{ t('plan.schedule_type') }}<br>
+        <select id="scheduleType" onchange="updateScheduleUi()">
+          <option value="daily">{{ t('schedule.type.daily') }}</option>
+          <option value="weekly">{{ t('schedule.type.weekly') }}</option>
+          <option value="biweekly">{{ t('schedule.type.biweekly') }}</option>
+          <option value="monthly">{{ t('schedule.type.monthly') }}</option>
+        </select>
+      </label>
+      <label id="weekdayWrap">{{ t('plan.weekday') }}<br>
+        <select id="scheduleWeekday">
+          {% for i in range(7) %}
+          <option value="{{ i }}">{{ t('weekday.' ~ i) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label id="monthlyWeekWrap" style="display:none">{{ t('plan.monthly_week') }}<br>
+        <select id="monthlyWeek">
+          <option value="1">{{ t('schedule.monthly_nth.1') }}</option>
+          <option value="2">{{ t('schedule.monthly_nth.2') }}</option>
+          <option value="3">{{ t('schedule.monthly_nth.3') }}</option>
+          <option value="4">{{ t('schedule.monthly_nth.4') }}</option>
+          <option value="-1">{{ t('schedule.monthly_last') }}</option>
+        </select>
+      </label>
+    </div>
+    <p class="hint">{{ t('plan.wol_info') }} <span id="wolPreview"></span></p>
+    <p><strong>{{ t('plan.source') }}</strong></p>
+    <div class="pick">
+      <select id="src-device" style="min-width:180px"></select>
+      <span class="sel" id="src-label">{{ t('job.pick_none') }}</span>
+      <button type="button" class="secondary" onclick="openPicker('src')">{{ t('job.pick') }}</button>
+    </div>
+    <p><strong>{{ t('plan.dest') }}</strong></p>
+    <div class="pick">
+      <select id="dst-device" style="min-width:180px"></select>
+      <span class="sel" id="dst-label">{{ t('job.pick_none') }}</span>
+      <button type="button" class="secondary" onclick="openPicker('dst')">{{ t('job.pick') }}</button>
+    </div>
+    <p><label><input type="checkbox" id="penabled" checked /> {{ t('plan.enabled') }}</label></p>
+    <button type="button" id="planSaveBtn" onclick="savePlan()">{{ t('plan.save') }}</button>
+    <button type="button" id="planCancelBtn" class="secondary" style="display:none" onclick="cancelEditPlan()">{{ t('plan.cancel_edit') }}</button>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('plan.list') }}</h2>
+    <table>
+      <thead><tr>
+        <th>{{ t('plan.col_name') }}</th><th>{{ t('plan.col_route') }}</th>
+        <th>{{ t('plan.col_schedule') }}</th><th>{{ t('plan.col_status') }}</th><th></th>
+      </tr></thead>
+      <tbody id="plans-body"></tbody>
+    </table>
+  </div>
+
+  <details class="card collapse-card">
+    <summary>{{ t('notify.title') }}</summary>
+    <div style="margin-top:.75rem">
+      <p class="hint">{{ t('notify.hint') }} {{ t('notify.app_hint') }}</p>
+      <p><label><input type="checkbox" id="notifyFail" checked /> {{ t('notify.on_fail') }}</label>
+      <label style="margin-left:1rem"><input type="checkbox" id="notifyOk" /> {{ t('notify.on_success') }}</label></p>
+      <p>Telegram: <input id="tgToken" type="password" placeholder="token" /> Chat <input id="tgChat" /></p>
+      <p>SMTP: <input id="smtpHost" placeholder="host" /> : <input id="smtpPort" value="587" style="width:70px" /></p>
+      <p>To: <input id="emailTo" type="email" /></p>
+      <button type="button" onclick="saveNotify()">{{ t('notify.save') }}</button>
+      <button type="button" class="secondary" onclick="testNotify()">{{ t('notify.test') }}</button>
+    </div>
+  </details>
+
+  <div class="card">
+    <h2>{{ t('log.title') }} <button type="button" class="secondary" onclick="loadLog()">{{ t('log.refresh') }}</button></h2>
+    <pre id="log"></pre>
+  </div>
+
+  <div id="modal-dev" class="modal"><div class="modal-box">
+    <h2>{{ t('modal.add_device') }}</h2>
+    <input type="hidden" id="md-host" />
+    <p class="hint">{{ t('modal.online_required') }}</p>
+    <label>{{ t('modal.mac') }}</label><input id="md-mac" placeholder="aa:bb:cc:dd:ee:ff" style="width:100%" />
+    <p class="hint">{{ t('modal.mac_hint') }}</p>
+    <label>{{ t('modal.user') }}</label><input id="md-user" style="width:100%" />
+    <label>{{ t('modal.password') }}</label><input id="md-pass" type="password" style="width:100%" />
+    <button id="md-save-btn" onclick="saveDev()">{{ t('modal.connect') }}</button>
+    <button class="secondary" onclick="closeM('modal-dev')">{{ t('modal.cancel') }}</button>
+    <p id="md-err" style="color:#f88"></p>
+  </div></div>
+
+  <div id="modal-pick" class="modal"><div class="modal-box wide">
+    <h2>{{ t('modal.pick_folder') }}</h2>
+    <p class="hint" id="pick-hint">{{ t('modal.pick_hint') }}</p>
+    <p class="hint" id="pick-breadcrumb"></p>
+    <button type="button" class="link" id="pick-up" onclick="pickUp()" style="display:none">{{ t('modal.pick_up') }}</button>
+    <ul class="dir-list" id="pick-list"></ul>
+    <button type="button" class="ok" onclick="confirmPickHere()">{{ t('modal.pick_here') }}</button>
+    <button type="button" class="secondary" onclick="closeM('modal-pick')">{{ t('modal.cancel') }}</button>
+  </div></div>
+
+  <script>
+    const LANG = {{ lang|tojson }};
+    const I18N = {{ i18n|tojson }};
+    const LANG_COOKIE = 'ws_lang';
+    function T(k){ return I18N[k]||k; }
+
+    async function setLang(code) {
+      if (code === LANG) return;
+      try { localStorage.setItem(LANG_COOKIE, code); } catch (e) { /* ignore */ }
+      try {
+        const r = await fetch('/api/lang', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept-Language': code },
+          body: JSON.stringify({ lang: code }),
+        });
+        if (r.ok) { window.location.reload(); return; }
+      } catch (e) { /* fallback */ }
+      document.cookie = LANG_COOKIE + '=' + code + '; path=/; max-age=31536000; SameSite=Lax';
+      window.location.reload();
+    }
+
+    function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+    function closeM(id){ document.getElementById(id).classList.remove('open'); }
+    let devices=[], volumeLabels={}, srcSel=null, dstSel=null, pickSide='src';
+    let pickState={device_id:'local',share:'',path:'',volume:''};
+    let cachedPlans=[], editPlanId=null;
+
+    function volLabel(v){
+      if(volumeLabels[v]) return volumeLabels[v];
+      if(v==='2') return T('volume.2');
+      if(v==='ugos') return T('volume.ugos');
+      if(v==='1') return T('volume.1');
+      if(v && v.startsWith('usb-')) return T('volume.usb_name_fmt').replace('{name}', v.slice(4).replace(/__/g,'/'));
+      return '';
+    }
+
+    function deviceOptionsHtml(){
+      return devices.map(d=>'<option value="'+esc(d.id)+'">'+esc(d.name)+' ('+esc(d.type)+')</option>').join('');
+    }
+
+    function endpointDisplayLabel(ep){
+      const dev = devices.find(d=>d.id===ep.device_id);
+      let label = dev ? dev.name : '?';
+      if(dev && dev.type==='smb'){
+        label += ':/'+(ep.share+(ep.path?'/'+ep.path:'')).replace(/^\/+/,'');
+      } else if(dev && dev.type==='local'){
+        const vn = volLabel(ep.volume);
+        if(vn && ep.path) label += ' · '+vn+':/'+ep.path;
+        else if(vn) label += ' · '+vn+T('volume.whole');
+        else if(ep.path) label += ':/'+ep.path;
+      } else if(ep.path){
+        label += ':/'+ep.path;
+      }
+      return label;
+    }
+
+    async function loadConfig(){
+      const j = await (await fetch('/api/config')).json();
+      const el = document.getElementById('wol-bc');
+      let txt = '';
+      if(j.wol_source_ips && j.wol_source_ips.length)
+        txt += 'WOL_SOURCE_IP='+j.wol_source_ips.join(',')+' · ';
+      if(j.wol_broadcast){
+        txt += 'WOL_BROADCAST='+j.wol_broadcast;
+        if(j.wol_broadcast_hint && j.wol_broadcast !== j.wol_broadcast_hint)
+          txt += ' → '+T('plan.wol_bc_hint').replace('{bc}', j.wol_broadcast_hint);
+      }
+      el.textContent = txt;
+      volumeLabels = {};
+      for(const v of (j.volumes||[])){
+        if(v.id && v.label) volumeLabels[v.id] = v.label;
+      }
+    }
+
+    async function loadDevices(){
+      devices = await (await fetch('/api/devices')).json();
+      const tb = document.getElementById('devices-body');
+      tb.innerHTML = '';
+      const opts = deviceOptionsHtml();
+      document.getElementById('src-device').innerHTML = opts;
+      document.getElementById('dst-device').innerHTML = opts.replace(/value="local"/,'');
+      document.getElementById('dst-device').onchange = updateWolPreview;
+      for(const d of devices.filter(x=>x.type==='smb')){
+        const tr = document.createElement('tr');
+        const macIn = '<input value="'+esc(d.mac||'')+'" placeholder="aa:bb:cc:dd:ee:ff" style="min-width:150px" onchange="patchMac(\''+esc(d.id)+'\',this.value)" />';
+        const fc = d.folder_cache||{};
+        let cacheTxt = fc.building ? T('devices.cache_building')
+          : (fc.ready ? (fc.partial ? T('devices.cache_partial') : T('devices.cache_ready')) : T('devices.cache_missing'));
+        const cacheCell = '<small>'+esc(cacheTxt)+'</small>'
+          + (fc.ready && fc.cached_at ? '<br><small class="hint">'+esc(fc.cached_at)+'</small>' : '')
+          + '<br><button type="button" class="secondary" onclick="refreshCache(\''+esc(d.id)+'\')">'+esc(T('devices.refresh_cache'))+'</button>'
+          + ' <button type="button" class="secondary" onclick="testWol(\''+esc(d.id)+'\')">'+esc(T('devices.wol_test'))+'</button>';
+        tr.innerHTML = '<td>'+esc(d.name)+'</td><td>'+esc(d.host)+'</td><td>'+macIn+'</td><td>'+cacheCell+'</td><td><button class="danger" onclick="delDev(\''+esc(d.id)+'\')">×</button></td>';
+        tb.appendChild(tr);
+      }
+      updateWolPreview();
+    }
+
+    function wolBroadcastForIp(ip){
+      const p = (ip||'').split('.');
+      if(p.length!==4) return '';
+      return p[0]+'.'+p[1]+'.'+p[2]+'.255';
+    }
+
+    function updateWolPreview(){
+      const sel = document.getElementById('dst-device');
+      const dev = devices.find(d=>d.id===sel.value);
+      const el = document.getElementById('wolPreview');
+      if(!dev){ el.textContent=''; return; }
+      const ip = dev.host||'';
+      const mac = (dev.mac||'').trim();
+      const bc = wolBroadcastForIp(ip);
+      if(mac) el.textContent = T('plan.wol_preview').replace('{ip}', ip).replace('{mac}', mac).replace('{bc}', bc);
+      else el.textContent = T('plan.wol_preview_missing').replace('{ip}', ip);
+    }
+
+    async function patchMac(id, mac){
+      await fetch('/api/devices/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({mac})});
+      const d = devices.find(x=>x.id===id);
+      if(d) d.mac = mac;
+      updateWolPreview();
+    }
+
+    function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+    async function pollCacheReady(id, errEl){
+      const maxWait = 180000;
+      const start = Date.now();
+      while(Date.now() - start < maxWait){
+        let j;
+        try {
+          j = await (await fetch('/api/devices/'+id+'/cache-status')).json();
+        } catch(e){
+          await sleep(2000);
+          continue;
+        }
+        if(!j.ok){ break; }
+        if(j.state === 'failed'){
+          if(errEl) errEl.textContent = T('err.cache_scan_failed').replace('{detail}', j.error||'?');
+          return false;
+        }
+        if(j.ready || j.state === 'ready'){
+          return true;
+        }
+        if(errEl){
+          const n = j.dir_levels || 0;
+          errEl.textContent = T('devices.scanning_progress').replace('{n}', String(n));
+        }
+        await sleep(1500);
+      }
+      if(errEl) errEl.textContent = T('err.cache_build_failed').replace('{detail}', 'timeout');
+      return false;
+    }
+
+    async function testWol(id){
+      const j = await (await fetch('/api/wol/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:id})})).json();
+      alert(j.ok ? ('WoL OK: '+j.message) : (j.error||j.message||'WoL fail'));
+      loadLog();
+    }
+
+    async function refreshCache(id){
+      const j = await (await fetch('/api/devices/'+id+'/refresh-cache',{method:'POST'})).json();
+      if(!j.ok){ alert(j.error); return; }
+      await pollCacheReady(id, null);
+      await loadDevices();
+    }
+
+    function openDevModal(){
+      const h = document.getElementById('dev-host').value.trim();
+      if(!h){ alert('IP'); return; }
+      document.getElementById('md-host').value = h;
+      document.getElementById('md-err').textContent = '';
+      document.getElementById('modal-dev').classList.add('open');
+    }
+
+    async function saveDev(){
+      const btn = document.getElementById('md-save-btn');
+      const errEl = document.getElementById('md-err');
+      btn.disabled = true;
+      errEl.textContent = T('devices.scanning_cache');
+      try {
+        const body = { host: document.getElementById('md-host').value, name: document.getElementById('dev-name').value||document.getElementById('md-host').value,
+          mac: document.getElementById('md-mac').value, username: document.getElementById('md-user').value, password: document.getElementById('md-pass').value };
+        const r = await fetch('/api/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        let j;
+        try { j = await r.json(); } catch(e) { errEl.textContent = T('err.generic'); return; }
+        if(!j.ok){ errEl.textContent = j.error || T('err.generic'); return; }
+        if(j.device && j.device.id){
+          const ok = await pollCacheReady(j.device.id, errEl);
+          if(!ok) return;
+        }
+        closeM('modal-dev');
+        await loadDevices();
+      } catch(e) {
+        errEl.textContent = T('err.generic');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+    async function delDev(id){ await fetch('/api/devices/'+id,{method:'DELETE'}); loadDevices(); }
+
+    async function openPicker(side){
+      pickSide = side;
+      await loadConfig();
+      const devId = document.getElementById(side+'-device').value;
+      const dev = devices.find(d=>d.id===devId);
+      if(side==='dst' && dev && dev.type==='smb'){
+        const fc = dev.folder_cache||{};
+        if(!fc.ready){
+          alert(T('err.nas_offline_no_cache'));
+          return;
+        }
+      }
+      const cur = side==='src' ? srcSel : dstSel;
+      pickState = cur
+        ? { device_id: cur.device_id, share: cur.share||'', path: cur.path||'', volume: cur.volume||'' }
+        : { device_id: devId, share:'', path:'', volume:'' };
+      document.getElementById('modal-pick').classList.add('open');
+      loadPickList();
+    }
+
+    async function loadPickList(){
+      const q = new URLSearchParams({
+        device_id: pickState.device_id,
+        path: pickState.path||'',
+        share: pickState.share||'',
+        volume: pickState.volume||'',
+      });
+      const j = await (await fetch('/api/browse?'+q)).json();
+      if(!j.ok){ alert(j.error); return; }
+      pickState = { device_id:j.device_id, share:j.share||'', path:j.path||'', volume:j.volume||'' };
+      const dev = devices.find(d=>d.id===j.device_id);
+      let crumb = dev ? dev.name : '';
+      if(dev && dev.type==='local' && !j.volume) crumb += T('ui.pick_choose_volume');
+      else if(dev && dev.type==='local' && j.volume){
+        const pathPart = j.path ? ' / '+j.path : T('volume.whole');
+        crumb += T('ui.pick_volume_path').replace('{vol}', j.volume).replace('{path}', pathPart);
+      } else {
+        if(j.share) crumb += ' / '+j.share;
+        if(j.path) crumb += ' / '+j.path;
+      }
+      document.getElementById('pick-breadcrumb').textContent = crumb || T('picker.root');
+      const hintEl = document.getElementById('pick-hint');
+      if(j.cached) hintEl.textContent = j.hint || T('browse.cached_offline');
+      else if(j.hint) hintEl.textContent = j.hint;
+      else hintEl.textContent = T('modal.pick_hint');
+      const canUp = j.share || j.path || j.volume;
+      document.getElementById('pick-up').style.display = canUp ? 'inline' : 'none';
+      const ul = document.getElementById('pick-list'); ul.innerHTML='';
+      for(const e of (j.entries||[])){
+        const li = document.createElement('li');
+        const icon = e.kind==='volume' ? '📦 ' : e.kind==='share' ? '📁 ' : '📂 ';
+        const label = document.createElement('span');
+        label.className='row-label';
+        label.textContent = icon+e.name;
+        li.appendChild(label);
+        const acts = document.createElement('span');
+        acts.className='row-actions';
+        if(e.kind==='volume'){
+          acts.innerHTML = '<button type="button" class="link" data-act="open">'+esc(T('picker.open'))+'</button> '
+            +'<button type="button" class="link" data-act="select">'+esc(T('picker.whole_volume'))+'</button>';
+          acts.querySelector('[data-act=open]').onclick = (ev)=>{ ev.stopPropagation(); openPickEntry(e); };
+          acts.querySelector('[data-act=select]').onclick = (ev)=>{ ev.stopPropagation(); selectPickEntry(e); };
+        } else if(e.kind==='share' || e.kind==='dir'){
+          acts.innerHTML = '<button type="button" class="link" data-act="select">'+esc(T('picker.select'))+'</button> '
+            +'<button type="button" class="link" data-act="open">'+esc(T('picker.open'))+'</button>';
+          acts.querySelector('[data-act=select]').onclick = (ev)=>{ ev.stopPropagation(); selectPickEntry(e); };
+          acts.querySelector('[data-act=open]').onclick = (ev)=>{ ev.stopPropagation(); openPickEntry(e); };
+        } else {
+          li.style.cursor='pointer';
+          li.onclick = ()=>openPickEntry(e);
+        }
+        if(acts.innerHTML) li.appendChild(acts);
+        ul.appendChild(li);
+      }
+    }
+
+    function openPickEntry(e){
+      if(e.kind==='volume'){ pickState.volume=e.volume||''; pickState.path=''; pickState.share=''; }
+      else if(e.kind==='share'){ pickState.share=e.name; pickState.path=''; }
+      else if(e.kind==='dir'){ pickState.path=e.path; }
+      loadPickList();
+    }
+
+    function selectPickEntry(e){
+      if(e.kind==='volume'){ pickState.volume=e.volume||''; pickState.path=''; pickState.share=''; }
+      else if(e.kind==='share'){ pickState.share=e.name; pickState.path=''; }
+      else if(e.kind==='dir'){ pickState.path=e.path; }
+      const dev = devices.find(d=>d.id===pickState.device_id);
+      if(dev && dev.type==='local' && !pickState.volume){ alert(T('err.pick_volume_first')); return; }
+      if(dev && dev.type==='smb' && !pickState.share){ alert(T('err.pick_share_first')); return; }
+      confirmPickHere();
+    }
+
+    function pickUp(){
+      if(pickState.path){
+        const parts = pickState.path.split('/').filter(Boolean);
+        parts.pop();
+        pickState.path = parts.join('/');
+      } else if(pickState.share){
+        pickState.share = '';
+      } else if(pickState.volume){
+        pickState.volume = '';
+      }
+      loadPickList();
+    }
+
+    function confirmPickHere(){
+      const dev = devices.find(d=>d.id===pickState.device_id);
+      if(dev && dev.type==='local' && !pickState.volume){ alert(T('err.pick_volume_first')); return; }
+      if(dev && dev.type==='smb' && !pickState.share){ alert(T('err.pick_share_first')); return; }
+      const ep = { device_id: pickState.device_id, share: pickState.share||'', path: pickState.path||'', volume: pickState.volume||'' };
+      const label = endpointDisplayLabel(ep);
+      if(pickSide==='src'){
+        srcSel = ep;
+        document.getElementById('src-label').textContent = label;
+        document.getElementById('src-device').value = ep.device_id;
+      } else {
+        dstSel = ep;
+        document.getElementById('dst-label').textContent = label;
+        document.getElementById('dst-device').value = ep.device_id;
+        updateWolPreview();
+      }
+      closeM('modal-pick');
+    }
+
+    function updateScheduleUi(){
+      const st = document.getElementById('scheduleType').value;
+      const wd = document.getElementById('weekdayWrap');
+      const mw = document.getElementById('monthlyWeekWrap');
+      if(st === 'daily'){
+        wd.style.display = 'none';
+        mw.style.display = 'none';
+      } else if(st === 'monthly'){
+        wd.style.display = '';
+        mw.style.display = '';
+      } else {
+        wd.style.display = '';
+        mw.style.display = 'none';
+      }
+    }
+
+    function resetPlanForm(){
+      editPlanId = null;
+      document.getElementById('planFormTitle').textContent = T('plan.new');
+      document.getElementById('planSaveBtn').textContent = T('plan.save');
+      document.getElementById('planCancelBtn').style.display = 'none';
+      document.getElementById('pname').value = '';
+      document.getElementById('runAt').value = '12:30';
+      document.getElementById('readyWait').value = '20';
+      document.getElementById('scheduleType').value = 'daily';
+      document.getElementById('scheduleWeekday').value = '0';
+      document.getElementById('monthlyWeek').value = '1';
+      document.getElementById('penabled').checked = true;
+      srcSel = dstSel = null;
+      document.getElementById('src-label').textContent = T('job.pick_none');
+      document.getElementById('dst-label').textContent = T('job.pick_none');
+      updateScheduleUi();
+      updateWolPreview();
+    }
+
+    function cancelEditPlan(){
+      resetPlanForm();
+    }
+
+    function editPlan(id){
+      const p = cachedPlans.find(x=>x.id===id);
+      if(!p || p.running) return;
+      editPlanId = id;
+      document.getElementById('planFormTitle').textContent = T('plan.edit');
+      document.getElementById('planSaveBtn').textContent = T('plan.update');
+      document.getElementById('planCancelBtn').style.display = '';
+      document.getElementById('pname').value = p.name||'';
+      document.getElementById('runAt').value = p.run_at||'12:30';
+      document.getElementById('readyWait').value = String(p.ready_wait_minutes||20);
+      document.getElementById('scheduleType').value = p.schedule_type||'daily';
+      document.getElementById('scheduleWeekday').value = String(p.weekday!=null?p.weekday:0);
+      document.getElementById('monthlyWeek').value = String(p.monthly_week!=null?p.monthly_week:1);
+      document.getElementById('penabled').checked = !!p.enabled;
+      updateScheduleUi();
+      srcSel = Object.assign({}, p.source||{});
+      dstSel = Object.assign({}, p.dest||{});
+      document.getElementById('src-device').value = srcSel.device_id||'local';
+      document.getElementById('dst-device').value = dstSel.device_id||'';
+      document.getElementById('src-label').textContent = endpointDisplayLabel(srcSel);
+      document.getElementById('dst-label').textContent = endpointDisplayLabel(dstSel);
+      updateWolPreview();
+      document.getElementById('plan-form-card').scrollIntoView({behavior:'smooth', block:'start'});
+    }
+
+    async function savePlan(){
+      if(!srcSel||!dstSel){ alert(T('err.pick_both')); return; }
+      const dest = {...dstSel, device_id: document.getElementById('dst-device').value};
+      const runTime = document.getElementById('runAt').value||'12:30';
+      const body = {
+        name: document.getElementById('pname').value,
+        run_at: runTime,
+        schedule_type: document.getElementById('scheduleType').value,
+        weekday: parseInt(document.getElementById('scheduleWeekday').value, 10),
+        monthly_week: parseInt(document.getElementById('monthlyWeek').value, 10),
+        enabled: document.getElementById('penabled').checked,
+        ready_wait_minutes: parseInt(document.getElementById('readyWait').value,10)||20,
+        source: srcSel,
+        dest,
+      };
+      const url = editPlanId ? ('/api/plans/'+editPlanId) : '/api/plans';
+      const method = editPlanId ? 'PATCH' : 'POST';
+      const j = await (await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+      if(!j.ok){ alert(j.error); return; }
+      resetPlanForm();
+      loadPlans();
+    }
+
+    async function loadPlans(){
+      cachedPlans = await (await fetch('/api/plans')).json();
+      const tb = document.getElementById('plans-body'); tb.innerHTML='';
+      for(const p of cachedPlans){
+        const tr = document.createElement('tr');
+        const st = p.running ? T('plan.running') : (p.last_status==='ok'?T('plan.status_ok'):(p.last_status==='fail'?T('plan.status_fail'):T('plan.status_never')));
+        tr.innerHTML = '<td>'+esc(p.name)+'</td><td><small>'+esc(p.source_label)+' → '+esc(p.dest_label)+'</small></td><td>'+esc(p.schedule_label||p.run_at)+'</td><td>'+st+'</td><td>'+
+          '<button class="secondary" onclick="editPlan(\''+esc(p.id)+'\')" '+(p.running?'disabled':'')+'>'+T('plan.edit_btn')+'</button>'+
+          '<button class="ok" onclick="runPlan(\''+esc(p.id)+'\')" '+(p.running?'disabled':'')+'>'+T('plan.run')+'</button>'+
+          '<button class="danger" onclick="delPlan(\''+esc(p.id)+'\')">'+T('plan.delete')+'</button></td>';
+        tb.appendChild(tr);
+      }
+    }
+    async function runPlan(id){ await fetch('/api/plans/'+id+'/run',{method:'POST'}); loadPlans(); loadLog(); setInterval(loadPlans,3000); }
+    async function delPlan(id){ await fetch('/api/plans/'+id,{method:'DELETE'}); loadPlans(); }
+    async function loadLog(){ const j=await (await fetch('/api/log')).json(); document.getElementById('log').textContent=j.text||''; }
+    async function saveNotify(){
+      await fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        notify_on_fail: document.getElementById('notifyFail').checked,
+        notify_on_success: document.getElementById('notifyOk').checked,
+        telegram_enabled: !!document.getElementById('tgToken').value||!!document.getElementById('tgChat').value,
+        telegram_bot_token: document.getElementById('tgToken').value, telegram_chat_id: document.getElementById('tgChat').value,
+        email_enabled: !!document.getElementById('smtpHost').value, smtp_host: document.getElementById('smtpHost').value,
+        smtp_port: parseInt(document.getElementById('smtpPort').value,10)||587, email_to: document.getElementById('emailTo').value,
+      })});
+    }
+    async function testNotify(){ await fetch('/api/notifications/test',{method:'POST'}); loadLog(); }
+
+    (async()=>{ try { localStorage.setItem(LANG_COOKIE, LANG); } catch(e){} updateScheduleUi(); await loadConfig(); await loadDevices(); loadPlans(); loadLog(); setInterval(loadPlans,15000); setInterval(async()=>{
+      if(devices.some(d=>d.type==='smb' && (d.folder_cache||{}).building)) await loadDevices();
+    }, 3000); })();
+  </script>
+  {% include 'compliance_footer.html' %}
+</body>
+</html>

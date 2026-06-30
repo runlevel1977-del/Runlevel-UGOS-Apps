@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ t('app.title') }}</title>
+  <style>
+    :root { --bg: #0f1419; --card: #1a2332; --accent: #2d9f6f; --text: #e8eef4; --muted: #8fa3b8; --border: #334; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 1.25rem; }
+    h1 { color: var(--accent); margin: 0 0 0.25rem; }
+    h2 { font-size: 1.1rem; margin: 0 0 0.75rem; }
+    .card { background: var(--card); border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem; }
+    .app-layout { display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: flex-start; max-width: 1400px; }
+    .main-column { flex: 1 1 560px; min-width: 0; max-width: 960px; }
+    .jobs-panel { flex: 0 0 300px; width: 300px; max-width: 100%; position: sticky; top: 1.25rem; max-height: calc(100vh - 2.5rem); overflow-y: auto; margin-bottom: 1rem; }
+    .job-item { margin-bottom: 1.1rem; padding-bottom: 1.1rem; border-bottom: 1px solid var(--border); }
+    .job-item:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+    .job-item .job-name { font-weight: 600; font-size: 0.92rem; margin: 0 0 0.2rem; }
+    .job-item .job-route { font-size: 0.72rem; color: var(--muted); line-height: 1.35; margin-bottom: 0.5rem; word-break: break-word; }
+    .progress-track { height: 10px; background: #0a0e12; border-radius: 5px; overflow: hidden; border: 1px solid var(--border); }
+    .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.35s ease; border-radius: 4px; }
+    .progress-fill.indeterminate { width: 40% !important; animation: job-slide 1.4s ease-in-out infinite; }
+    .progress-fill.ok { background: #2d9f6f; }
+    .progress-fill.error { background: #a33; }
+    @keyframes job-slide { 0% { margin-left: 0; } 50% { margin-left: 60%; } 100% { margin-left: 0; } }
+    .job-meta { font-size: 0.75rem; color: var(--muted); margin-top: 0.4rem; line-height: 1.4; }
+    .jobs-empty { font-size: 0.85rem; color: var(--muted); }
+    .hint { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.75rem; }
+    button { background: var(--accent); color: #fff; border: none; padding: 0.45rem 0.9rem; border-radius: 6px; cursor: pointer; margin: 0.25rem 0.25rem 0.25rem 0; font-size: 0.9rem; }
+    button.secondary { background: #445; }
+    button.danger { background: #a33; }
+    button.link { background: transparent; color: var(--accent); text-decoration: underline; padding: 0.2rem; }
+    input, select { padding: 0.45rem; border: 1px solid var(--border); border-radius: 6px; background: #0f1419; color: var(--text); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th, td { text-align: left; padding: 0.45rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .pick { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin: 0.35rem 0; }
+    .pick .sel { flex: 1; min-width: 200px; background: #0a0e12; padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px solid var(--border); font-size: 0.85rem; }
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 100; align-items: center; justify-content: center; padding: 1rem; }
+    .modal.open { display: flex; }
+    .modal-box { background: var(--card); border-radius: 12px; padding: 1rem; max-width: 520px; width: 100%; max-height: 80vh; overflow: auto; }
+    .modal-box.wide { max-width: 640px; }
+    .dir-list { list-style: none; padding: 0; margin: 0.5rem 0; }
+    .dir-list li { padding: 0.35rem 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .dir-list li .row-label { flex: 1; min-width: 120px; }
+    .dir-list li .row-actions { white-space: nowrap; }
+    .badge { font-size: 0.72rem; padding: 0.1rem 0.4rem; border-radius: 4px; background: #2a3f5f; }
+    pre { background: #0a0e12; padding: 0.75rem; overflow: auto; max-height: 180px; font-size: 0.78rem; border-radius: 6px; }
+    .page-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 1rem; max-width: 1400px; margin-bottom: 0.5rem; }
+    .page-header .title-block { flex: 1; min-width: 220px; }
+    .page-header h1 { margin-bottom: 0.25rem; }
+    .lang-switch { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
+    .lang-switch .lang-label { font-size: 0.8rem; color: var(--muted); margin-right: 0.25rem; }
+    .lang-switch button.lang-btn { background: #2a3545; color: var(--muted); margin: 0; min-width: 2.6rem; font-weight: 600; }
+    .lang-switch button.lang-btn.active { background: var(--accent); color: #fff; }
+    .lang-switch button.lang-btn:not(.active):hover { color: var(--text); }
+    .companion-link { font-size: 0.82rem; color: var(--muted); margin: 0.35rem 0 0; }
+    .companion-link a { color: var(--accent); text-decoration: none; }
+    .companion-link a:hover { text-decoration: underline; }
+    .warn-box { font-size: 0.82rem; color: #e8a060; margin: 0.25rem 0 0.5rem; }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <div class="title-block">
+      <h1>{{ t('app.title') }}</h1>
+      <p class="hint">v{{ version }} — {{ t('app.intro') }}</p>
+      <p class="companion-link">{{ t('footer.nas_admin') }}
+        <a href="{{ nas_admin_url }}" target="_blank" rel="noopener noreferrer">{{ t('footer.nas_admin_link') }}</a>
+      </p>
+    </div>
+    <div class="lang-switch" role="group" aria-label="{{ t('ui.language') }}">
+      <span class="lang-label">{{ t('ui.language') }}</span>
+      <button type="button" class="lang-btn{% if lang == 'de' %} active{% endif %}" onclick="setLang('de')"{% if lang == 'de' %} aria-current="true"{% endif %}>DE</button>
+      <button type="button" class="lang-btn{% if lang == 'en' %} active{% endif %}" onclick="setLang('en')"{% if lang == 'en' %} aria-current="true"{% endif %}>EN</button>
+    </div>
+  </header>
+
+  <div class="app-layout">
+  <div class="main-column">
+
+  <div class="card">
+    <h2>{{ t('devices.network') }}</h2>
+    <p class="hint" id="scan-config">{{ t('devices.scan_loading') }}</p>
+    <button type="button" onclick="scanNetwork()">{{ t('devices.scan') }}</button>
+    <span id="scan-msg" class="hint"></span>
+    <p style="margin-top:0.75rem"><strong>{{ t('ui.add_pc_hint') }}</strong></p>
+    <div class="pick">
+      <input type="text" id="manual-host" placeholder="{{ t('ui.manual_ip_ph') }}" style="min-width:200px" />
+      <button type="button" class="secondary" onclick="addDeviceByIp()">{{ t('devices.add_ip_btn') }}</button>
+    </div>
+    <table>
+      <thead><tr><th>{{ t('devices.host') }}</th><th>{{ t('devices.services') }}</th><th></th></tr></thead>
+      <tbody id="scan-results"></tbody>
+    </table>
+    <h2 style="margin-top:1rem">{{ t('devices.saved') }}</h2>
+    <table>
+      <thead><tr><th>{{ t('devices.name') }}</th><th>{{ t('devices.type') }}</th><th>{{ t('devices.host') }}</th><th></th></tr></thead>
+      <tbody id="saved-devices"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('profile.new') }}</h2>
+    <p class="hint">{{ t('profile.one_way') }}</p>
+    <label>{{ t('profile.name') }}</label><br>
+    <input type="text" id="pname" style="width:100%;max-width:400px" placeholder="{{ t('profile.name_ph') }}" />
+    <p><strong>{{ t('profile.source') }}</strong></p>
+    <div class="pick">
+      <select id="src-device" style="min-width:180px"></select>
+      <span class="sel" id="src-label">{{ t('profile.pick_none') }}</span>
+      <button type="button" class="secondary" onclick="openPicker('new','src')">{{ t('profile.pick_folder') }}</button>
+    </div>
+    <p><strong>{{ t('profile.dest') }}</strong></p>
+    <div class="pick">
+      <select id="dst-device" style="min-width:180px"></select>
+      <span class="sel" id="dst-label">{{ t('profile.pick_none') }}</span>
+      <button type="button" class="secondary" onclick="openPicker('new','dst')">{{ t('profile.pick_folder') }}</button>
+    </div>
+    <p><label><input type="checkbox" id="auto_sync" onchange="syncMoveAutoCheckboxes('new')" /> {{ t('profile.auto') }}</label></p>
+    <p><label><input type="checkbox" id="delete_source_after" onchange="syncMoveAutoCheckboxes('new')" /> {{ t('profile.move_source') }}</label></p>
+    <p class="hint warn-box">{{ t('profile.move_hint') }}</p>
+    <div id="schedule-new">
+      <label>{{ t('profile.schedule_type') }}</label><br>
+      <select id="schedule_type" onchange="updateScheduleUi('new')" style="min-width:300px">
+        <option value="window">{{ t('profile.schedule_window_opt') }}</option>
+        <option value="always">{{ t('profile.schedule_always_opt') }}</option>
+      </select>
+      <p id="schedule-window-new">
+        <label>{{ t('profile.window_start') }}</label>
+        <input type="time" id="window_start" value="15:30" style="width:120px" />
+        <label style="margin-left:12px">{{ t('profile.window_end') }}</label>
+        <input type="time" id="window_end" value="22:00" style="width:120px" />
+      </p>
+      <p id="schedule-interval-new">
+        <label>{{ t('profile.interval') }}</label>
+        <select id="interval" style="width:120px">
+          <option value="15">15 min</option>
+          <option value="30" selected>30 min</option>
+          <option value="45">45 min</option>
+          <option value="60">60 min</option>
+          <option value="120">120 min</option>
+        </select>
+      </p>
+      <p class="hint">{{ t('profile.schedule_hint') }}</p>
+    </div>
+    <br><button type="button" onclick="createProfile()">{{ t('profile.save') }}</button>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('profiles.title') }}</h2>
+    <table>
+      <thead><tr><th>{{ t('profile.name') }}</th><th>{{ t('profiles.col_route') }}</th><th>{{ t('profiles.col_mode') }}</th><th>{{ t('profiles.col_status') }}</th><th></th></tr></thead>
+      <tbody id="profiles"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('log.title') }}</h2>
+    <button type="button" class="secondary" onclick="loadLog()">{{ t('log.refresh') }}</button>
+    <pre id="log"></pre>
+  </div>
+
+  </div>
+
+  <aside class="card jobs-panel" aria-live="polite">
+    <h2>{{ t('jobs.active_title') }}</h2>
+    <div id="active-jobs" class="jobs-empty">{{ t('jobs.none') }}</div>
+  </aside>
+
+  </div>
+
+  <div id="modal-save" class="modal">
+    <div class="modal-box">
+      <h2>{{ t('modal.add_device') }}</h2>
+      <p class="hint" id="save-host-hint"></p>
+      <label>{{ t('modal.display_name') }}</label><br><input type="text" id="save-name" style="width:100%" /><br>
+      <label>{{ t('modal.user') }}</label><br><input type="text" id="save-user" style="width:100%" /><br>
+      <label>{{ t('modal.password') }}</label><br><input type="password" id="save-pass" style="width:100%" /><br>
+      <button type="button" onclick="confirmSaveDevice()">{{ t('modal.connect') }}</button>
+      <button type="button" class="secondary" onclick="closeModal('modal-save')">{{ t('modal.cancel') }}</button>
+      <p id="save-err" class="hint" style="color:#f88"></p>
+    </div>
+  </div>
+
+  <div id="modal-edit" class="modal">
+    <div class="modal-box wide">
+      <h2>{{ t('modal.edit_profile') }}</h2>
+      <label>{{ t('profile.name') }}</label><br>
+      <input type="text" id="edit-pname" style="width:100%" /><br>
+      <p><strong>{{ t('profile.source') }}</strong></p>
+      <div class="pick">
+        <select id="edit-src-device" style="min-width:180px"></select>
+        <span class="sel" id="edit-src-label">{{ t('profile.pick_none') }}</span>
+        <button type="button" class="secondary" onclick="openPicker('edit','src')">{{ t('profile.pick_folder') }}</button>
+      </div>
+      <p><strong>{{ t('profile.dest') }}</strong></p>
+      <div class="pick">
+        <select id="edit-dst-device" style="min-width:180px"></select>
+        <span class="sel" id="edit-dst-label">{{ t('profile.pick_none') }}</span>
+        <button type="button" class="secondary" onclick="openPicker('edit','dst')">{{ t('profile.pick_folder') }}</button>
+      </div>
+      <p><label><input type="checkbox" id="edit-auto_sync" onchange="syncMoveAutoCheckboxes('edit')" /> {{ t('profile.auto') }}</label></p>
+      <p><label><input type="checkbox" id="edit-delete_source_after" onchange="syncMoveAutoCheckboxes('edit')" /> {{ t('profile.move_source') }}</label></p>
+      <p class="hint warn-box">{{ t('profile.move_hint') }}</p>
+      <div id="schedule-edit">
+        <label>{{ t('profile.schedule_type') }}</label><br>
+        <select id="edit-schedule_type" onchange="updateScheduleUi('edit')" style="min-width:300px">
+          <option value="window">{{ t('profile.schedule_window_opt') }}</option>
+          <option value="always">{{ t('profile.schedule_always_opt') }}</option>
+        </select>
+        <p id="schedule-window-edit">
+          <label>{{ t('profile.window_start') }}</label>
+          <input type="time" id="edit-window_start" value="15:30" style="width:120px" />
+          <label style="margin-left:12px">{{ t('profile.window_end') }}</label>
+          <input type="time" id="edit-window_end" value="22:00" style="width:120px" />
+        </p>
+        <p id="schedule-interval-edit">
+          <label>{{ t('profile.interval') }}</label>
+          <select id="edit-interval" style="width:120px">
+            <option value="15">15 min</option>
+            <option value="30">30 min</option>
+            <option value="45">45 min</option>
+            <option value="60">60 min</option>
+            <option value="120">120 min</option>
+          </select>
+        </p>
+        <p class="hint">{{ t('profile.schedule_hint') }}</p>
+      </div>
+      <p id="edit-err" class="hint" style="color:#f88"></p>
+      <button type="button" onclick="saveEditProfile()">{{ t('modal.save_changes') }}</button>
+      <button type="button" class="secondary" onclick="closeModal('modal-edit')">{{ t('modal.cancel') }}</button>
+    </div>
+  </div>
+
+  <div id="modal-pick" class="modal">
+    <div class="modal-box wide">
+      <h2>{{ t('modal.pick_folder') }}</h2>
+      <p class="hint" id="pick-hint">{{ t('modal.pick_hint') }}</p>
+      <p class="hint" id="pick-breadcrumb"></p>
+      <button type="button" class="link" id="pick-up" onclick="pickUp()" style="display:none">{{ t('modal.pick_up') }}</button>
+      <ul class="dir-list" id="pick-list"></ul>
+      <button type="button" onclick="confirmPickHere()">{{ t('modal.pick_here') }}</button>
+      <button type="button" class="secondary" onclick="closeModal('modal-pick')">{{ t('modal.cancel') }}</button>
+    </div>
+  </div>
+
+  <script>
+    const LANG = {{ lang|tojson }};
+    const I18N = {{ i18n|tojson }};
+    const LANG_COOKIE = 'transfer_hub_lang';
+    function T(k) { return I18N[k] || k; }
+
+    async function setLang(code) {
+      if (code === LANG) return;
+      try {
+        localStorage.setItem(LANG_COOKIE, code);
+      } catch (e) { /* ignore */ }
+      try {
+        const r = await fetch('/api/lang', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept-Language': code },
+          body: JSON.stringify({ lang: code }),
+        });
+        if (r.ok) {
+          window.location.reload();
+          return;
+        }
+      } catch (e) { /* fallback below */ }
+      document.cookie = LANG_COOKIE + '=' + code + '; path=/; max-age=31536000; SameSite=Lax';
+      window.location.reload();
+    }
+
+    function apiFetch(url, options) {
+      const opt = options || {};
+      opt.headers = Object.assign({ 'Accept-Language': LANG }, opt.headers || {});
+      return fetch(url, opt);
+    }
+
+    let devices = [];
+    let profilesCache = [];
+    let volumeLabels = {};
+    let pickMode = 'new';
+    let pickSide = 'src';
+    let pickState = { device_id: 'local', share: '', path: '', volume: '' };
+    let srcSel = null, dstSel = null;
+    let editProfileId = null;
+    let editSrcSel = null, editDstSel = null;
+    let pendingHost = '';
+
+    function volLabel(v) {
+      if (volumeLabels[v]) return volumeLabels[v];
+      if (v === '2') return T('volume.2');
+      if (v === 'ugos') return T('volume.ugos');
+      if (v === '1') return T('volume.1');
+      if (v && v.startsWith('usb-')) {
+        return T('volume.usb_name_fmt').replace('{name}', v.slice(4).replace(/__/g, '/'));
+      }
+      return '';
+    }
+
+    function deviceOptionsHtml() {
+      return devices.map(d => `<option value="${d.id}">${esc(d.name)} (${d.type})</option>`).join('');
+    }
+
+    function endpointDisplayLabel(ep) {
+      const dev = devices.find(d => d.id === ep.device_id);
+      let label = dev ? dev.name : '?';
+      if (dev && dev.type === 'smb') {
+        label += ':/' + (ep.share + (ep.path ? '/' + ep.path : '')).replace(/^\/+/, '');
+      } else if (dev && dev.type === 'local') {
+        const vn = volLabel(ep.volume);
+        if (vn && ep.path) label += ' · ' + vn + ':/' + ep.path;
+        else if (vn) label += ' · ' + vn + T('volume.whole');
+        else if (ep.path) label += ':/' + ep.path;
+      } else if (ep.path) {
+        label += ':/' + ep.path;
+      }
+      return label;
+    }
+
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+    function setScanConfigText(j) {
+      const el = document.getElementById('scan-config');
+      if (!j.lan_subnet) {
+        el.textContent = T('ui.lan_not_set');
+        el.style.color = '#f88';
+      } else {
+        let txt = T('ui.lan_set').replace('{subnet}', j.lan_subnet);
+        if (j.extra_hosts && j.extra_hosts.length) {
+          txt += T('ui.lan_extra').replace('{ips}', j.extra_hosts.join(', '));
+        }
+        el.textContent = txt;
+        el.style.color = '';
+      }
+    }
+
+    async function loadDevices() {
+      const r = await apiFetch('/api/devices');
+      devices = await r.json();
+      const opts = deviceOptionsHtml();
+      document.getElementById('src-device').innerHTML = opts;
+      document.getElementById('dst-device').innerHTML = opts;
+      document.getElementById('edit-src-device').innerHTML = opts;
+      document.getElementById('edit-dst-device').innerHTML = opts;
+      const tb = document.getElementById('saved-devices');
+      tb.innerHTML = '';
+      for (const d of devices) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${esc(d.name)}</td><td>${esc(d.type)}</td><td>${esc(d.host||'—')}</td>
+          <td>${d.id === 'local' ? '' : `<button class="danger" onclick="delDevice('${d.id}')">${esc(T('devices.remove'))}</button>`}</td>`;
+        tb.appendChild(tr);
+      }
+    }
+
+    async function loadScanConfig() {
+      const r = await apiFetch('/api/config');
+      const j = await r.json();
+      setScanConfigText(j);
+      volumeLabels = {};
+      for (const v of (j.volumes || [])) {
+        if (v.id && v.label) volumeLabels[v.id] = v.label;
+      }
+    }
+
+    async function scanNetwork() {
+      document.getElementById('scan-msg').textContent = T('ui.scan_running');
+      const r = await apiFetch('/api/devices/scan');
+      const j = await r.json();
+      document.getElementById('scan-msg').textContent = j.message || '';
+      if (j.config) setScanConfigText(j.config);
+      const tb = document.getElementById('scan-results');
+      tb.innerHTML = '';
+      for (const h of (j.hosts || [])) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${esc(h.host)}</td><td>${(h.services||[]).map(s=>'<span class="badge">'+esc(s)+'</span>').join(' ')}</td>
+          <td>${h.smb ? `<button onclick="startSaveDevice('${esc(h.host)}')">${esc(T('devices.add'))}</button>` : ''}</td>`;
+        tb.appendChild(tr);
+      }
+    }
+
+    function addDeviceByIp() {
+      const host = (document.getElementById('manual-host').value || '').trim();
+      if (!host) { alert(T('err.enter_ip')); return; }
+      startSaveDevice(host);
+    }
+
+    function startSaveDevice(host) {
+      pendingHost = host;
+      document.getElementById('save-name').value = host;
+      document.getElementById('save-host-hint').textContent = T('ui.host_smb').replace('{host}', host);
+      document.getElementById('save-user').value = '';
+      document.getElementById('save-pass').value = '';
+      document.getElementById('save-err').textContent = '';
+      document.getElementById('modal-save').classList.add('open');
+    }
+
+    async function confirmSaveDevice() {
+      const body = {
+        host: pendingHost,
+        name: document.getElementById('save-name').value,
+        username: document.getElementById('save-user').value,
+        password: document.getElementById('save-pass').value,
+      };
+      const r = await apiFetch('/api/devices', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!j.ok) { document.getElementById('save-err').textContent = j.error || T('err.generic'); return; }
+      closeModal('modal-save');
+      await loadDevices();
+    }
+
+    async function delDevice(id) {
+      if (!confirm(T('err.confirm_remove_device'))) return;
+      await apiFetch('/api/devices/' + id, { method: 'DELETE' });
+      await loadDevices();
+    }
+
+    async function openPicker(mode, side) {
+      pickMode = mode;
+      pickSide = side;
+      await loadScanConfig();
+      const prefix = mode === 'edit' ? 'edit-' : '';
+      const devId = document.getElementById(prefix + side + '-device').value;
+      const cur = mode === 'edit'
+        ? (side === 'src' ? editSrcSel : editDstSel)
+        : (side === 'src' ? srcSel : dstSel);
+      pickState = cur
+        ? { device_id: cur.device_id, share: cur.share || '', path: cur.path || '', volume: cur.volume || '' }
+        : { device_id: devId, share: '', path: '', volume: '' };
+      document.getElementById('modal-pick').classList.add('open');
+      loadPickList();
+    }
+
+    async function loadPickList() {
+      const q = new URLSearchParams({
+        device_id: pickState.device_id,
+        path: pickState.path || '',
+        share: pickState.share || '',
+        volume: pickState.volume || '',
+      });
+      const r = await apiFetch('/api/browse?' + q);
+      const j = await r.json();
+      if (!j.ok) { alert(j.error); return; }
+      pickState = { device_id: j.device_id, share: j.share || '', path: j.path || '', volume: j.volume || '' };
+      const dev = devices.find(d => d.id === j.device_id);
+      let crumb = dev ? dev.name : '';
+      if (dev && dev.type === 'local' && !j.volume) crumb += T('ui.pick_choose_volume');
+      else if (dev && dev.type === 'local' && j.volume) {
+        const pathPart = j.path ? ' / ' + j.path : T('volume.whole');
+        crumb += T('ui.pick_volume_path').replace('{vol}', j.volume).replace('{path}', pathPart);
+      } else {
+        if (j.share) crumb += ' / ' + j.share;
+        if (j.path) crumb += ' / ' + j.path;
+      }
+      document.getElementById('pick-breadcrumb').textContent = crumb || T('picker.root');
+      if (j.hint) document.getElementById('pick-hint').textContent = j.hint;
+      const canUp = j.share || j.path || j.volume;
+      document.getElementById('pick-up').style.display = canUp ? 'inline' : 'none';
+      const ul = document.getElementById('pick-list');
+      ul.innerHTML = '';
+      for (const e of (j.entries || [])) {
+        const li = document.createElement('li');
+        const icon = e.kind === 'volume' ? '📦 ' : e.kind === 'share' ? '📁 ' : '📂 ';
+        const label = document.createElement('span');
+        label.className = 'row-label';
+        label.textContent = icon + e.name;
+        li.appendChild(label);
+        const acts = document.createElement('span');
+        acts.className = 'row-actions';
+        if (e.kind === 'volume') {
+          acts.innerHTML = '<button type="button" class="link" data-act="open">' + esc(T('picker.open')) + '</button> '
+            + '<button type="button" class="link" data-act="select">' + esc(T('picker.whole_volume')) + '</button>';
+          acts.querySelector('[data-act=open]').onclick = (ev) => { ev.stopPropagation(); openPickEntry(e); };
+          acts.querySelector('[data-act=select]').onclick = (ev) => { ev.stopPropagation(); selectPickEntry(e); };
+        } else if (e.kind === 'share' || e.kind === 'dir') {
+          acts.innerHTML = '<button type="button" class="link" data-act="select">' + esc(T('picker.select')) + '</button> '
+            + '<button type="button" class="link" data-act="open">' + esc(T('picker.open')) + '</button>';
+          acts.querySelector('[data-act=select]').onclick = (ev) => { ev.stopPropagation(); selectPickEntry(e); };
+          acts.querySelector('[data-act=open]').onclick = (ev) => { ev.stopPropagation(); openPickEntry(e); };
+        } else {
+          li.style.cursor = 'pointer';
+          li.onclick = () => openPickEntry(e);
+        }
+        if (acts.innerHTML) li.appendChild(acts);
+        ul.appendChild(li);
+      }
+    }
+
+    function openPickEntry(e) {
+      if (e.kind === 'volume') {
+        pickState.volume = e.volume || '';
+        pickState.path = '';
+        pickState.share = '';
+      } else if (e.kind === 'share') {
+        pickState.share = e.name;
+        pickState.path = '';
+      } else if (e.kind === 'dir') {
+        pickState.path = e.path;
+      }
+      loadPickList();
+    }
+
+    function selectPickEntry(e) {
+      if (e.kind === 'volume') {
+        pickState.volume = e.volume || '';
+        pickState.path = '';
+        pickState.share = '';
+      } else if (e.kind === 'share') {
+        pickState.share = e.name;
+        pickState.path = '';
+      } else if (e.kind === 'dir') {
+        pickState.path = e.path;
+      }
+      const dev = devices.find(d => d.id === pickState.device_id);
+      if (dev && dev.type === 'local' && !pickState.volume) {
+        alert(T('err.pick_volume_first'));
+        return;
+      }
+      confirmPickHere();
+    }
+
+    function pickUp() {
+      if (pickState.path) {
+        const parts = pickState.path.split('/').filter(Boolean);
+        parts.pop();
+        pickState.path = parts.join('/');
+      } else if (pickState.share) {
+        pickState.share = '';
+      } else if (pickState.volume) {
+        pickState.volume = '';
+      }
+      loadPickList();
+    }
+
+    function confirmPickHere() {
+      const dev = devices.find(d => d.id === pickState.device_id);
+      if (dev && dev.type === 'local' && !pickState.volume) {
+        alert(T('err.pick_volume_first'));
+        return;
+      }
+      const ep = {
+        device_id: pickState.device_id,
+        share: pickState.share || '',
+        path: pickState.path || '',
+        volume: pickState.volume || '',
+      };
+      const label = endpointDisplayLabel(ep);
+      if (pickMode === 'edit') {
+        if (pickSide === 'src') {
+          editSrcSel = ep;
+          document.getElementById('edit-src-label').textContent = label;
+          document.getElementById('edit-src-device').value = ep.device_id;
+        } else {
+          editDstSel = ep;
+          document.getElementById('edit-dst-label').textContent = label;
+          document.getElementById('edit-dst-device').value = ep.device_id;
+        }
+      } else {
+        if (pickSide === 'src') {
+          srcSel = ep;
+          document.getElementById('src-label').textContent = label;
+          document.getElementById('src-device').value = ep.device_id;
+        } else {
+          dstSel = ep;
+          document.getElementById('dst-label').textContent = label;
+          document.getElementById('dst-device').value = ep.device_id;
+        }
+      }
+      closeModal('modal-pick');
+    }
+
+    function syncMoveAutoCheckboxes(mode) {
+      const prefix = mode === 'edit' ? 'edit-' : '';
+      const autoEl = document.getElementById(prefix + 'auto_sync');
+      const moveEl = document.getElementById(prefix + 'delete_source_after');
+      if (autoEl && moveEl && autoEl.checked && moveEl.checked) {
+        if (document.activeElement === moveEl) autoEl.checked = false;
+        else moveEl.checked = false;
+      }
+      updateScheduleUi(mode);
+    }
+
+    function normalizeScheduleType(st) {
+      if (st === 'interval' || st === 'daily') return st === 'daily' ? 'window' : 'always';
+      return st === 'always' ? 'always' : 'window';
+    }
+
+    function snapIntervalVal(v) {
+      const allowed = [15, 30, 45, 60, 120];
+      const n = parseInt(v, 10) || 30;
+      return allowed.reduce((best, x) => Math.abs(x - n) < Math.abs(best - n) ? x : best, 30);
+    }
+
+    function setIntervalSelect(el, minutes) {
+      if (!el) return;
+      const v = String(snapIntervalVal(minutes));
+      if (el.querySelector('option[value="' + v + '"]')) el.value = v;
+      else el.value = '30';
+    }
+
+    function updateScheduleUi(mode) {
+      const isEdit = mode === 'edit';
+      const prefix = isEdit ? 'edit-' : '';
+      const autoEl = document.getElementById(prefix + 'auto_sync');
+      const schedWrap = document.getElementById(isEdit ? 'schedule-edit' : 'schedule-new');
+      const st = normalizeScheduleType(document.getElementById(prefix + 'schedule_type').value);
+      const showSched = autoEl && autoEl.checked;
+      if (schedWrap) schedWrap.style.display = showSched ? '' : 'none';
+      const winRow = document.getElementById(isEdit ? 'schedule-window-edit' : 'schedule-window-new');
+      if (winRow) winRow.style.display = st === 'window' ? '' : 'none';
+    }
+
+    function scheduleFieldsFromForm(prefix) {
+      const st = normalizeScheduleType(document.getElementById(prefix + 'schedule_type').value || 'window');
+      const body = {
+        schedule_type: st,
+        interval_minutes: snapIntervalVal(document.getElementById(prefix + 'interval').value),
+      };
+      if (st === 'window') {
+        const ws = document.getElementById(prefix + 'window_start').value || '15:30';
+        const we = document.getElementById(prefix + 'window_end').value || '22:00';
+        body.window_start = ws.length === 5 ? ws : '15:30';
+        body.window_end = we.length === 5 ? we : '22:00';
+      }
+      return body;
+    }
+
+    function profileModeLabel(p) {
+      if (p.delete_source_after) return T('profiles.mode_move');
+      if (p.auto_sync) return p.schedule_label || (p.interval_minutes + ' min');
+      return '—';
+    }
+
+    async function createProfile() {
+      if (!srcSel || !dstSel) { alert(T('err.pick_source_dest')); return; }
+      const body = {
+        name: document.getElementById('pname').value,
+        source: srcSel,
+        dest: dstSel,
+        auto_sync: document.getElementById('auto_sync').checked,
+        delete_source_after: document.getElementById('delete_source_after').checked,
+        ...scheduleFieldsFromForm(''),
+      };
+      const r = await apiFetch('/api/profiles', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!j.ok) { alert(j.error); return; }
+      srcSel = dstSel = null;
+      document.getElementById('src-label').textContent = T('profile.pick_none');
+      document.getElementById('dst-label').textContent = T('profile.pick_none');
+      loadProfiles();
+      loadLog();
+    }
+
+    async function loadProfiles() {
+      const r = await apiFetch('/api/profiles');
+      profilesCache = await r.json();
+      const tb = document.getElementById('profiles');
+      tb.innerHTML = '';
+      for (const p of profilesCache) {
+        const tr = document.createElement('tr');
+        const src = p.source_label || JSON.stringify(p.source);
+        const dst = p.dest_label || JSON.stringify(p.dest);
+        const pid = esc(p.id);
+        tr.innerHTML = `<td><button type="button" class="link" onclick="openEditProfile('${pid}')">${esc(p.name)}</button></td>
+          <td><small>${esc(src)} → ${esc(dst)}</small></td>
+          <td>${esc(profileModeLabel(p))}</td>
+          <td>${p.last_status || '—'}</td>
+          <td><button onclick="runProfile('${pid}')">${esc(T('profiles.now'))}</button>
+          <button class="secondary" onclick="openEditProfile('${pid}')">${esc(T('profiles.edit'))}</button>
+          <button class="danger" onclick="deleteProfile('${pid}')">${esc(T('profiles.delete'))}</button></td>`;
+        tb.appendChild(tr);
+      }
+    }
+
+    function openEditProfile(id) {
+      const p = profilesCache.find(x => x.id === id);
+      if (!p) { alert(T('err.profile_not_found')); return; }
+      editProfileId = id;
+      editSrcSel = p.source ? { volume: '', ...p.source } : null;
+      editDstSel = p.dest ? { volume: '', ...p.dest } : null;
+      document.getElementById('edit-pname').value = p.name || '';
+      document.getElementById('edit-auto_sync').checked = !!p.auto_sync;
+      document.getElementById('edit-delete_source_after').checked = !!p.delete_source_after;
+      document.getElementById('edit-schedule_type').value = normalizeScheduleType(p.schedule_type || 'window');
+      setIntervalSelect(document.getElementById('edit-interval'), p.interval_minutes || 30);
+      document.getElementById('edit-window_start').value = p.window_start || p.run_at || '15:30';
+      document.getElementById('edit-window_end').value = p.window_end || '22:00';
+      updateScheduleUi('edit');
+      document.getElementById('edit-err').textContent = '';
+      if (editSrcSel) {
+        document.getElementById('edit-src-device').value = editSrcSel.device_id;
+        document.getElementById('edit-src-label').textContent = p.source_label || endpointDisplayLabel(editSrcSel);
+      } else {
+        document.getElementById('edit-src-label').textContent = T('profile.pick_none');
+      }
+      if (editDstSel) {
+        document.getElementById('edit-dst-device').value = editDstSel.device_id;
+        document.getElementById('edit-dst-label').textContent = p.dest_label || endpointDisplayLabel(editDstSel);
+      } else {
+        document.getElementById('edit-dst-label').textContent = T('profile.pick_none');
+      }
+      document.getElementById('modal-edit').classList.add('open');
+    }
+
+    async function saveEditProfile() {
+      if (!editProfileId || !editSrcSel || !editDstSel) {
+        document.getElementById('edit-err').textContent = T('err.pick_both');
+        return;
+      }
+      const body = {
+        name: document.getElementById('edit-pname').value,
+        source: editSrcSel,
+        dest: editDstSel,
+        auto_sync: document.getElementById('edit-auto_sync').checked,
+        delete_source_after: document.getElementById('edit-delete_source_after').checked,
+        ...scheduleFieldsFromForm('edit-'),
+      };
+      const r = await apiFetch('/api/profiles/' + editProfileId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!j.ok) {
+        document.getElementById('edit-err').textContent = j.error || T('err.generic');
+        return;
+      }
+      closeModal('modal-edit');
+      loadProfiles();
+      loadLog();
+    }
+
+    async function runProfile(id) {
+      const r = await apiFetch('/api/profiles/' + id + '/run', { method: 'POST' });
+      const j = await r.json();
+      if (!j.ok) alert(j.message || T('err.generic'));
+      loadActiveJobs();
+      loadProfiles();
+      loadLog();
+    }
+
+    function renderActiveJobs(jobs) {
+      const box = document.getElementById('active-jobs');
+      if (!jobs || !jobs.length) {
+        box.className = 'jobs-empty';
+        box.textContent = T('jobs.none');
+        return;
+      }
+      box.className = '';
+      box.innerHTML = '';
+      for (const j of jobs) {
+        const item = document.createElement('div');
+        item.className = 'job-item';
+        const pct = j.status === 'running' && !j.percent ? -1 : (j.percent || 0);
+        let fillClass = 'progress-fill';
+        if (j.status === 'ok') fillClass += ' ok';
+        else if (j.status === 'error') fillClass += ' error';
+        else if (pct < 0) fillClass += ' indeterminate';
+        const width = pct < 0 ? '' : ` style="width:${Math.min(100, pct)}%"`;
+        const statusLabel = j.status === 'ok' ? T('jobs.done')
+          : (j.status === 'error' ? T('jobs.failed') : T('jobs.running'));
+        const meta = [statusLabel, j.detail, j.speed, j.eta ? ('ETA ' + j.eta) : ''].filter(Boolean).join(' · ');
+        item.innerHTML = `
+          <div class="job-name">${esc(j.name)}</div>
+          <div class="job-route">${esc(j.source_label)} → ${esc(j.dest_label)}</div>
+          <div class="progress-track"><div class="${fillClass}"${width}></div></div>
+          <div class="job-meta">${esc(meta)}</div>`;
+        box.appendChild(item);
+      }
+    }
+
+    async function loadActiveJobs() {
+      try {
+        const r = await apiFetch('/api/jobs/active');
+        const j = await r.json();
+        if (j.ok) renderActiveJobs(j.jobs || []);
+      } catch (e) { /* ignore */ }
+    }
+    async function deleteProfile(id) {
+      if (!confirm(T('err.confirm_delete_profile'))) return;
+      await apiFetch('/api/profiles/' + id, { method: 'DELETE' });
+      loadProfiles();
+    }
+    async function loadLog() {
+      const r = await apiFetch('/api/logs');
+      const j = await r.json();
+      document.getElementById('log').textContent = j.log || T('log.empty');
+    }
+
+    try { localStorage.setItem(LANG_COOKIE, LANG); } catch (e) { /* ignore */ }
+
+    updateScheduleUi('new');
+    loadScanConfig();
+    loadDevices();
+    loadProfiles();
+    loadLog();
+    loadActiveJobs();
+    setInterval(loadActiveJobs, 1500);
+  </script>
+  {% include 'compliance_footer.html' %}
+</body>
+</html>

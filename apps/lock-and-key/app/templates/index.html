@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ t('app.title') }}</title>
+  <style>
+    :root { --bg:#0f1419; --card:#1a2332; --accent:#ef4444; --accent2:#2dd4bf; --text:#e8eef4; --muted:#8fa3b8; --border:#334; }
+    * { box-sizing:border-box; }
+    body { font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); margin:0; padding:1.25rem; }
+    h1 { color:var(--accent2); margin:0 0 .25rem; }
+    h2 { font-size:1.05rem; margin:0 0 .75rem; color:var(--muted); }
+    .card { background:var(--card); border-radius:10px; padding:1rem 1.25rem; margin-bottom:1rem; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:.75rem; }
+    label { display:block; font-size:.8rem; color:var(--muted); margin-bottom:.2rem; }
+    input, select { width:100%; background:#0a0e12; color:var(--text); border:1px solid var(--border); border-radius:6px; padding:.45rem .55rem; }
+    button { background:var(--accent2); color:#fff; border:none; padding:.45rem .85rem; border-radius:6px; cursor:pointer; font-size:.88rem; margin-right:.35rem; margin-top:.35rem; }
+    button.danger { background:var(--accent); }
+    button.secondary { background:#445; }
+    table { width:100%; border-collapse:collapse; font-size:.85rem; }
+    th,td { text-align:left; padding:.45rem; border-bottom:1px solid var(--border); vertical-align:top; }
+    .status-locked { color:#f87171; }
+    .status-unlocked { color:#4ade80; }
+    .hint { font-size:.85rem; color:var(--muted); margin:.25rem 0 .75rem; }
+    .warn { color:#fca5a5; font-size:.85rem; }
+    pre { background:#0a0e12; padding:.75rem; overflow:auto; max-height:140px; font-size:.75rem; border-radius:6px; }
+    .page-header { display:flex; flex-wrap:wrap; justify-content:space-between; gap:1rem; margin-bottom:.75rem; }
+    .lang-switch button { background:#2a3545; color:var(--muted); min-width:2.5rem; }
+    .lang-switch button.active { background:var(--accent2); color:#fff; }
+    #job-status { min-height:1.2rem; font-size:.85rem; color:var(--accent2); }
+    .browse-row { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+    .path-display { font-family:Consolas,monospace; font-size:.8rem; color:var(--muted); }
+    .path-display.seal-target-picked { color:var(--accent2); font-weight:600; }
+    .create-name-col { max-width: 300px; }
+    .create-name-col .hint { margin-bottom: .35rem; }
+    .create-name-col label.inline-check { display:flex; gap:.4rem; align-items:flex-start; margin-top:.75rem; }
+    .create-name-col label.inline-check input { width:auto; margin-top:.15rem; flex-shrink:0; }
+    .create-name-col label.inline-check span { font-size:.8rem; color:var(--text); line-height:1.35; }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <div>
+      <h1>{{ t('app.title') }}</h1>
+      <p class="hint">v{{ version }} — {{ t('app.intro') }}</p>
+      <p class="hint">{{ t('companion') }} <a href="{{ nas_admin_url }}" style="color:var(--accent2)">Ugreen NAS Admin</a></p>
+      <p class="warn">{{ t('warn.no_recovery') }}</p>
+      <p class="hint">{{ t('warn.seal_result') }}</p>
+      <p class="hint">{{ t('warn.usb_remove') }}</p>
+    </div>
+    <div class="lang-switch">
+      <span class="hint">{{ t('ui.language') }}</span>
+      <button type="button" class="{% if lang == 'de' %}active{% endif %}" onclick="setLang('de')">DE</button>
+      <button type="button" class="{% if lang == 'en' %}active{% endif %}" onclick="setLang('en')">EN</button>
+    </div>
+  </header>
+
+  <div class="card">
+    <h2>{{ t('vaults.title') }}</h2>
+    <div id="vaults-empty" class="hint" style="display:none">{{ t('vaults.empty') }}</div>
+    <table id="vaults-table">
+      <thead>
+        <tr>
+          <th>{{ t('vaults.col_name') }}</th>
+          <th>{{ t('vaults.col_path') }}</th>
+          <th>{{ t('vaults.col_status') }}</th>
+          <th>{{ t('vaults.col_usb') }}</th>
+          <th>{{ t('vaults.col_files') }}</th>
+          <th>{{ t('vaults.col_actions') }}</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div id="job-status"></div>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('create.title') }}</h2>
+    <div class="grid">
+      <div class="create-name-col">
+        <label>{{ t('create.name') }}</label>
+        <input id="seal-name" type="text" />
+        <label class="inline-check">
+          <input id="seal-bind" type="checkbox" checked onchange="toggleSealUsbPick()" />
+          <span>{{ t('create.bind_usb') }}</span>
+        </label>
+        <div id="seal-usb-wrap" style="margin-top:.5rem">
+          <label>{{ t('usb.pick') }}</label>
+          <select id="seal-usb-pick"></select>
+          <p class="hint">{{ t('create.bind_hint') }}</p>
+          <p class="hint">{{ t('usb.one_stick') }}</p>
+        </div>
+      </div>
+      <div>
+        <label>{{ t('create.volume') }}</label>
+        <select id="seal-volume"></select>
+        <p class="hint">{{ t('create.volume_hint') }}</p>
+      </div>
+      <div>
+        <label>{{ t('create.folder') }}</label>
+        <div class="browse-row">
+          <select id="seal-folder" title="{{ t('create.subfolder') }}"></select>
+          <button type="button" class="secondary" onclick="browseUp()" title="↑">↑</button>
+        </div>
+        <label class="hint">{{ t('create.browse_here') }}</label>
+        <div class="path-display" id="seal-browse-path">/</div>
+        <button type="button" class="secondary" onclick="selectCurrentFolder()">{{ t('create.select_folder') }}</button>
+        <label class="hint" style="margin-top:.5rem">{{ t('create.selected') }}</label>
+        <div class="path-display" id="seal-target">{{ t('create.not_selected') }}</div>
+      </div>
+    </div>
+    <label style="margin-top:.5rem;display:flex;gap:.4rem;align-items:center;">
+      <input id="seal-key-pw-enable" type="checkbox" style="width:auto" onchange="toggleSealKeyPassword()" />
+      <span>{{ t('create.key_password') }}</span>
+    </label>
+    <div id="seal-key-pw-wrap" style="display:none;margin-top:.5rem">
+      <div class="grid">
+        <div>
+          <label>{{ t('create.key_password_field') }}</label>
+          <input id="seal-key-pw" type="password" autocomplete="new-password" />
+        </div>
+        <div>
+          <label>{{ t('create.key_password_confirm') }}</label>
+          <input id="seal-key-pw-confirm" type="password" autocomplete="new-password" />
+        </div>
+      </div>
+      <p class="hint">{{ t('create.key_password_hint') }}</p>
+    </div>
+    <button type="button" class="danger" onclick="sealFolder()">{{ t('create.seal') }}</button>
+    <button type="button" class="secondary" id="btn-download-key" style="display:none" onclick="downloadKey()">Key ↓</button>
+    <button type="button" class="secondary" id="btn-usb-key" style="display:none" onclick="writeKeyUsb(false)">{{ t('usb.write_key') }}</button>
+    <p class="hint">{{ t('usb.browser_alert_hint') }}</p>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('unlock.title') }}</h2>
+    <div class="grid">
+      <div>
+        <label>{{ t('unlock.pick') }}</label>
+        <select id="action-vault"></select>
+      </div>
+      <div>
+        <label>{{ t('usb.pick') }}</label>
+        <select id="unlock-usb-pick"></select>
+        <p class="hint">{{ t('usb.pick_hint') }}</p>
+      </div>
+      <div>
+        <label>{{ t('unlock.upload_key') }}</label>
+        <input id="key-upload" type="file" accept=".lk,.json,.key" />
+      </div>
+      <div id="unlock-key-pw-wrap">
+        <label>{{ t('unlock.key_password') }}</label>
+        <input id="unlock-key-pw" type="password" autocomplete="current-password" />
+        <p class="hint" id="unlock-key-pw-hint">{{ t('unlock.key_password_hint') }}</p>
+      </div>
+    </div>
+    <button type="button" onclick="unlockVault(false)">{{ t('unlock.from_usb') }}</button>
+    <button type="button" onclick="unlockVault(true)">{{ t('unlock.run') }} (upload)</button>
+    <button type="button" class="danger" onclick="relockVault(false)">{{ t('relock.run') }}</button>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('usb.title') }}</h2>
+    <div id="usb-empty" class="hint" style="display:none">{{ t('usb.empty') }}</div>
+    <table id="usb-table">
+      <thead><tr><th>Mount</th><th>Device</th><th>Model</th><th>FS-Label</th><th>Serial</th><th>Size</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('log.title') }}</h2>
+    <pre id="log-box">…</pre>
+  </div>
+
+<script>
+let volumes = [];
+let browsePath = '';
+let selectedSealVolume = '1';
+let browseSeq = 0;
+let sealTargetPath = null;
+let sealTargetHostPath = '';
+let sealableCount = 0;
+let lastBrowseHostPath = '/';
+let lastBrowseSealableCount = 0;
+let lastBrowseEncryptedCount = 0;
+let lastBrowseSealed = false;
+let lastBrowseSealedName = '';
+let lastVaultId = '';
+let lastDownloadUrl = '';
+let usbDevices = [];
+let vaultRows = [];
+
+function usbStickLabel(r) {
+  const name = (r.stick_name || r.model || r.fs_label || r.mount || '?').trim();
+  const serial = (r.usb_serial || '').trim();
+  const size = (r.size || '').trim();
+  const parts = [name];
+  if (serial) parts.push(serial);
+  if (size && size !== '—') parts.push(size);
+  return parts.join(' · ');
+}
+
+function fillUsbSelect(el, devices, selectedId) {
+  if (!el) return;
+  if (!devices.length) {
+    el.innerHTML = `<option value="">{{ t('usb.none') }}</option>`;
+    el.disabled = true;
+    return;
+  }
+  el.disabled = false;
+  el.innerHTML = devices.map(d => {
+    const id = d.volume_id || '';
+    const label = usbStickLabel(d);
+    const mount = (d.mount || '').replace(/</g, '');
+    return `<option value="${id}">${label} (${mount})</option>`;
+  }).join('');
+  if (selectedId && devices.some(d => d.volume_id === selectedId)) {
+    el.value = selectedId;
+  }
+}
+
+function selectedUsbVolume(selectId) {
+  const el = document.getElementById(selectId);
+  if (!el || el.disabled) return '';
+  return el.value || '';
+}
+
+function toggleSealUsbPick() {
+  const on = document.getElementById('seal-bind').checked;
+  document.getElementById('seal-usb-wrap').style.display = on ? 'block' : 'none';
+}
+
+function toggleSealKeyPassword() {
+  const on = document.getElementById('seal-key-pw-enable').checked;
+  document.getElementById('seal-key-pw-wrap').style.display = on ? 'block' : 'none';
+}
+
+function sealKeyPassphrase() {
+  if (!document.getElementById('seal-key-pw-enable').checked) return '';
+  const pw = document.getElementById('seal-key-pw').value;
+  const confirm = document.getElementById('seal-key-pw-confirm').value;
+  if (pw.length < 8) {
+    alert('{{ t("create.err_password_short") }}');
+    throw new Error('password short');
+  }
+  if (pw !== confirm) {
+    alert('{{ t("create.err_password_mismatch") }}');
+    throw new Error('password mismatch');
+  }
+  return pw;
+}
+
+function unlockKeyPassphrase() {
+  return document.getElementById('unlock-key-pw').value || '';
+}
+
+function selectedVaultRow() {
+  const vaultId = document.getElementById('action-vault').value;
+  return vaultRows.find(x => x.id === vaultId) || null;
+}
+
+function updateUnlockPasswordHint() {
+  const v = selectedVaultRow();
+  const hint = document.getElementById('unlock-key-pw-hint');
+  const wrap = document.getElementById('unlock-key-pw-wrap');
+  if (!v || !v.key_passphrase) {
+    hint.textContent = '{{ t("unlock.key_password_hint") }}';
+    wrap.style.opacity = '0.85';
+    return;
+  }
+  hint.textContent = '{{ t("vaults.key_pw_yes") }} — {{ t("unlock.key_password_hint") }}';
+  wrap.style.opacity = '1';
+}
+
+async function api(path, opts={}) {
+  const r = await fetch(path, {headers:{'Content-Type':'application/json'}, ...opts});
+  return r.json();
+}
+
+function setLang(lang) {
+  const u = new URL(location.href);
+  u.searchParams.set('lang', lang);
+  location.href = u.toString();
+}
+
+function statusLabel(s) {
+  const map = {
+    locked: '{{ t("vaults.status_locked") }}',
+    unlocked: '{{ t("vaults.status_unlocked") }}',
+    locking: '{{ t("vaults.status_locking") }}',
+  };
+  return map[s] || s;
+}
+
+async function loadVolumes() {
+  const data = await api('/api/volumes');
+  volumes = data.volumes || [];
+  const sealVol = document.getElementById('seal-volume');
+  const prev = selectedSealVolume || sealVol.value || '1';
+  sealVol.innerHTML = volumes.map(v => `<option value="${v.id}">${v.label}</option>`).join('');
+  if (prev && volumes.some(v => v.id === prev)) {
+    sealVol.value = prev;
+  } else if (volumes.some(v => v.id === '1')) {
+    sealVol.value = '1';
+  } else if (volumes.length) {
+    sealVol.value = volumes[0].id;
+  }
+  selectedSealVolume = sealVol.value || '1';
+  sealVol.onchange = () => {
+    selectedSealVolume = sealVol.value || '1';
+    browsePath = '';
+    sealTargetPath = null;
+    sealTargetHostPath = '';
+    sealableCount = 0;
+    loadBrowse();
+  };
+  loadBrowse();
+}
+
+function browseStatusLabel(data) {
+  const open = data.sealable_count || 0;
+  const enc = data.encrypted_count || 0;
+  if (data.sealed) {
+    return '{{ t("create.browse_sealed") }}'.replace('{enc}', String(enc)).replace('{open}', String(open));
+  }
+  return '{{ t("create.browse_open") }}'.replace('{open}', String(open)).replace('{enc}', String(enc));
+}
+
+function updateSealTargetDisplay() {
+  const el = document.getElementById('seal-target');
+  if (sealTargetPath === null) {
+    el.textContent = '{{ t("create.not_selected") }}';
+    el.className = 'path-display';
+    return;
+  }
+  if (lastBrowseSealed) {
+    const msg = '{{ t("create.already_sealed") }}'.replace('{name}', lastBrowseSealedName || '?');
+    el.textContent = `${sealTargetHostPath || '/'} — ${msg}`;
+    el.className = 'path-display warn';
+    return;
+  }
+  const filesLabel = '{{ t("create.files_ready") }}'.replace('{n}', String(sealableCount));
+  el.textContent = `${sealTargetHostPath || '/'} — ${filesLabel}`;
+  el.className = 'path-display seal-target-picked';
+}
+
+function selectCurrentFolder() {
+  if (lastBrowseSealed) {
+    alert('{{ t("create.already_sealed") }}'.replace('{name}', lastBrowseSealedName || '?'));
+    return;
+  }
+  if (lastBrowseSealableCount <= 0) {
+    alert('{{ t("create.files_ready") }}'.replace('{n}', '0'));
+    return;
+  }
+  sealTargetPath = browsePath;
+  sealTargetHostPath = lastBrowseHostPath;
+  sealableCount = lastBrowseSealableCount;
+  updateSealTargetDisplay();
+}
+
+async function loadBrowse() {
+  const vol = selectedSealVolume || document.getElementById('seal-volume').value || '1';
+  const path = browsePath;
+  const seq = ++browseSeq;
+  const data = await api(`/api/browse?volume=${encodeURIComponent(vol)}&path=${encodeURIComponent(path)}`);
+  if (seq !== browseSeq) return;
+  if (!data.ok) {
+    alert(data.error || 'browse error');
+    return;
+  }
+  const respVol = data.volume || vol;
+  if (respVol !== vol) return;
+  const sealVol = document.getElementById('seal-volume');
+  if (sealVol.value !== vol) {
+    sealVol.value = vol;
+    selectedSealVolume = vol;
+  }
+  lastBrowseHostPath = data.host_path || '/';
+  lastBrowseSealableCount = data.sealable_count || 0;
+  lastBrowseEncryptedCount = data.encrypted_count || 0;
+  lastBrowseSealed = !!data.sealed;
+  lastBrowseSealedName = data.sealed_name || data.sealed_vault_id || '';
+  if (sealTargetPath !== null && sealTargetPath === browsePath) {
+    sealableCount = lastBrowseSealableCount;
+  }
+  document.getElementById('seal-browse-path').textContent = `${lastBrowseHostPath} — ${browseStatusLabel(data)}`;
+  const sel = document.getElementById('seal-folder');
+  sel.innerHTML = `<option value="">{{ t('create.subfolder') }} …</option>` + (data.dirs || []).map(d => `<option value="${d.name}">${d.name}/</option>`).join('');
+  sel.value = '';
+  sel.onchange = () => {
+    if (!sel.value) return;
+    browsePath = browsePath ? `${browsePath}/${sel.value}` : sel.value;
+    loadBrowse();
+  };
+  updateSealTargetDisplay();
+}
+
+function browseUp() {
+  if (!browsePath) return;
+  const parts = browsePath.split('/').filter(Boolean);
+  parts.pop();
+  browsePath = parts.join('/');
+  loadBrowse();
+}
+
+async function refreshVaults() {
+  const data = await api('/api/vaults');
+  const rows = data.vaults || [];
+  vaultRows = rows;
+  document.getElementById('vaults-empty').style.display = rows.length ? 'none' : 'block';
+  const tbody = document.querySelector('#vaults-table tbody');
+  tbody.innerHTML = rows.map(v => `
+    <tr>
+      <td>${v.name || v.id}</td>
+      <td><code>${v.host_path || v.path}</code></td>
+      <td class="status-${v.status}">${statusLabel(v.status)}</td>
+      <td>${v.bind_label || v.bind_serial ? '{{ t("vaults.bind_yes") }}' : '{{ t("vaults.bind_no") }}'}<br><span class="hint">${v.key_passphrase ? '{{ t("vaults.key_pw_yes") }}' : '{{ t("vaults.key_pw_no") }}'}</span></td>
+      <td>${v.file_count != null ? v.file_count : '—'}</td>
+      <td><button type="button" class="danger" style="margin:0;padding:.3rem .55rem;font-size:.78rem" onclick="deleteVault('${v.id}')">{{ t("vaults.delete") }}</button></td>
+    </tr>`).join('');
+  const action = document.getElementById('action-vault');
+  action.innerHTML = rows.map(v => `<option value="${v.id}">${v.name} (${v.status})</option>`).join('');
+  action.onchange = updateUnlockPasswordHint;
+  updateUnlockPasswordHint();
+}
+
+async function refreshUsb() {
+  const data = await api('/api/usb');
+  const rows = data.devices || [];
+  usbDevices = rows;
+  document.getElementById('usb-empty').style.display = rows.length ? 'none' : 'block';
+  document.querySelector('#usb-table tbody').innerHTML = rows.map(r => `
+    <tr>
+      <td><code>${r.mount}</code></td>
+      <td><code>${r.device || '—'}</code></td>
+      <td>${r.model || r.stick_name || '—'}</td>
+      <td>${r.fs_label || '—'}</td>
+      <td>${r.usb_serial || '—'}</td>
+      <td>${r.size || '—'}</td>
+    </tr>`).join('');
+  fillUsbSelect(document.getElementById('seal-usb-pick'), rows, selectedUsbVolume('seal-usb-pick'));
+  fillUsbSelect(document.getElementById('unlock-usb-pick'), rows, selectedUsbVolume('unlock-usb-pick'));
+}
+
+async function refreshLog() {
+  const data = await api('/api/log');
+  document.getElementById('log-box').textContent = data.log || '—';
+}
+
+function buildJobDoneMessage(job) {
+  const files = job.result && job.result.files;
+  const host = job.result && job.result.host_path;
+  const verify = job.result && job.result.verify;
+  const kind = job.kind || '';
+  let msg = '{{ t("job.done") }}';
+  if (files != null) {
+    const filesLabel = (kind === 'unlock')
+      ? '{{ t("job.files_decrypted") }}'
+      : '{{ t("job.files_encrypted") }}';
+    msg += ` — ${files} ${filesLabel}`;
+  }
+  if (host) msg += ` @ ${host}`;
+  if (verify && verify.ok) {
+    const n = String(verify.checked != null ? verify.checked : files || '?');
+    const verifyMsg = verify.legacy
+      ? '{{ t("job.verify_ok_legacy") }}'.replace('{n}', n)
+      : '{{ t("job.verify_ok") }}'.replace('{n}', n);
+    msg += ` — ${verifyMsg}`;
+  }
+  return msg;
+}
+
+function isJobFinished(job) {
+  if (!job || typeof job !== 'object') return false;
+  if (job.status === 'done') return true;
+  if (job.status === 'error') return false;
+  const result = job.result;
+  return !!(result && result.files != null && job.status !== 'queued');
+}
+
+async function pollJob(jobId) {
+  const el = document.getElementById('job-status');
+  el.textContent = '{{ t("job.running") }}';
+  el.style.color = 'var(--accent2)';
+  for (let i = 0; i < 600; i++) {
+    const data = await api(`/api/jobs/${jobId}`);
+    if (!data.ok) {
+      await new Promise(r => setTimeout(r, 1000));
+      continue;
+    }
+    const job = data.job || {};
+    if (isJobFinished(job)) {
+      const msg = buildJobDoneMessage(job);
+      el.textContent = msg;
+      el.style.color = 'var(--accent2)';
+      void refreshVaults();
+      void refreshLog();
+      return msg;
+    }
+    if (job.status === 'error') {
+      const err = job.error || '?';
+      const verifyFail = String(err).toLowerCase().includes('integrity check');
+      const partial = String(err).toLowerCase().includes('partially sealed');
+      const sealSafe = job.kind === 'seal' && !partial;
+      const unlockSafe = job.kind === 'unlock';
+      const safeMsg = sealSafe ? '{{ t("job.seal_failed_safe") }} ' : (unlockSafe ? '{{ t("job.unlock_failed_safe") }} ' : '');
+      el.textContent = verifyFail
+        ? '{{ t("job.verify_fail") }}: ' + err
+        : safeMsg + '{{ t("job.error") }}: ' + err;
+      el.style.color = '#f87171';
+      return '';
+    }
+    if (job.last) el.textContent = '{{ t("job.running") }} ' + job.last;
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  el.textContent = '{{ t("job.error") }}: timeout';
+  el.style.color = '#f87171';
+  return '';
+}
+
+async function sealFolder() {
+  if (sealTargetPath === null) { alert('{{ t("create.err_no_folder") }}'); return; }
+  const bind = document.getElementById('seal-bind').checked;
+  const usbVol = bind ? selectedUsbVolume('seal-usb-pick') : '';
+  if (bind && !usbVol) { alert('{{ t("usb.none") }}'); return; }
+  let key_passphrase = '';
+  try { key_passphrase = sealKeyPassphrase(); } catch (_) { return; }
+  const body = {
+    name: document.getElementById('seal-name').value,
+    volume: document.getElementById('seal-volume').value,
+    path: sealTargetPath,
+    bind_usb: bind,
+    usb_volume: usbVol,
+    key_passphrase,
+  };
+  const data = await api('/api/vaults/seal', {method:'POST', body: JSON.stringify(body)});
+  if (!data.ok) { alert(data.error || 'error'); return; }
+  lastVaultId = data.vault.id;
+  lastDownloadUrl = data.download_url;
+  document.getElementById('btn-download-key').style.display = 'inline-block';
+  document.getElementById('btn-usb-key').style.display = 'inline-block';
+  const sealMsg = await pollJob(data.job_id);
+  if (!sealMsg) return;
+  if (bind && lastVaultId) await writeKeyUsb(true, sealMsg);
+}
+
+async function deleteVault(id) {
+  const v = vaultRows.find(x => x.id === id);
+  if (!v) return;
+  const name = v.name || v.id;
+  const locked = v.status === 'locked';
+  const msg = locked
+    ? '{{ t("vaults.delete_locked_confirm") }}'.replace('{name}', name)
+    : '{{ t("vaults.delete_confirm") }}'.replace('{name}', name);
+  if (!confirm(msg)) return;
+  const data = await api(`/api/vaults/${id}`, {
+    method: 'DELETE',
+    body: JSON.stringify({force: locked}),
+  });
+  if (!data.ok) { alert(data.error || 'error'); return; }
+  await refreshVaults();
+  await refreshLog();
+}
+
+function downloadKey() {
+  if (lastDownloadUrl) window.location = lastDownloadUrl;
+}
+
+function setStatus(msg, isError) {
+  const el = document.getElementById('job-status');
+  el.textContent = msg;
+  el.style.color = isError ? '#f87171' : 'var(--accent2)';
+}
+
+async function writeKeyUsb(skipConfirm, prefixMsg) {
+  const usbVol = selectedUsbVolume('seal-usb-pick');
+  if (!usbVol) { setStatus('{{ t("usb.none") }}', true); return false; }
+  if (!skipConfirm && !confirm('{{ t("usb.format_confirm") }}')) return false;
+  setStatus((prefixMsg ? prefixMsg + ' — ' : '') + '{{ t("job.writing_key") }}', false);
+  const data = await api(`/api/vaults/${lastVaultId}/keyfile/usb`, {
+    method:'POST',
+    body: JSON.stringify({usb_volume: usbVol})
+  });
+  if (!data.ok) {
+    setStatus((prefixMsg ? prefixMsg + ' — ' : '') + '{{ t("job.error") }}: ' + (data.error || '?'), true);
+    return false;
+  }
+  const keyMsg = '{{ t("usb.key_written") }}'.replace('{path}', data.path || '');
+  setStatus((prefixMsg ? prefixMsg + ' — ' : '') + keyMsg, false);
+  await refreshLog();
+  return true;
+}
+
+async function readUploadKeyB64() {
+  const file = document.getElementById('key-upload').files[0];
+  if (!file) return null;
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+
+async function unlockVault(upload) {
+  const vaultId = document.getElementById('action-vault').value;
+  const body = { key_passphrase: unlockKeyPassphrase() };
+  if (upload) {
+    const key_b64 = await readUploadKeyB64();
+    if (!key_b64) { alert('no file'); return; }
+    body.key_b64 = key_b64;
+  } else {
+    const usbVol = selectedUsbVolume('unlock-usb-pick');
+    if (!usbVol) { alert('{{ t("usb.none") }}'); return; }
+    body.usb_volume = usbVol;
+  }
+  const data = await api(`/api/vaults/${vaultId}/unlock`, {method:'POST', body: JSON.stringify(body)});
+  if (!data.ok) { alert(data.error || 'error'); return; }
+  await pollJob(data.job_id);
+}
+
+async function relockVault(upload) {
+  const vaultId = document.getElementById('action-vault').value;
+  const body = { key_passphrase: unlockKeyPassphrase() };
+  if (upload) {
+    const key_b64 = await readUploadKeyB64();
+    if (!key_b64) { alert('no file'); return; }
+    body.key_b64 = key_b64;
+  } else {
+    const usbVol = selectedUsbVolume('unlock-usb-pick');
+    if (!usbVol) { alert('{{ t("usb.none") }}'); return; }
+    body.usb_volume = usbVol;
+  }
+  const data = await api(`/api/vaults/${vaultId}/relock`, {method:'POST', body: JSON.stringify(body)});
+  if (!data.ok) { alert(data.error || 'error'); return; }
+  await pollJob(data.job_id);
+}
+
+async function boot() {
+  toggleSealUsbPick();
+  toggleSealKeyPassword();
+  await loadVolumes();
+  await refreshUsb();
+  try {
+    await api('/api/vaults/rescan', {method:'POST'});
+  } catch (_) {}
+  await refreshVaults();
+  await refreshLog();
+  setInterval(refreshUsb, 15000);
+  setInterval(refreshLog, 20000);
+}
+boot();
+</script>
+  {% include 'compliance_footer.html' %}
+</body>
+</html>
