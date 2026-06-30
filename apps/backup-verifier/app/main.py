@@ -57,7 +57,13 @@ def _inject_i18n():
     def _t(key: str, **fmt):
         return t(key, lng, **fmt)
 
-    return {"lang": lng, "t": _t, "i18n": bundle(lng), "nas_admin_url": NAS_ADMIN_URL}
+    return {
+        "lang": lng,
+        "t": _t,
+        "i18n": bundle(lng),
+        "nas_admin_url": NAS_ADMIN_URL,
+        **compliance_context(DATA_DIR),
+    }
 
 
 def _ep_key(ep: dict) -> str:
