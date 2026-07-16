@@ -10,7 +10,7 @@ ENV RUNLEVEL_APPS_REPO=https://github.com/runlevel1977-del/Runlevel-UGOS-Apps \
     RUNLEVEL_CREDENTIAL_CONSENT=1
 ENV TRANSFER_HUB_DATA=/data \
     NAS_MOUNT=/mnt/nas \
-    TRANSFER_HUB_VERSION=0.6.21 \
+    TRANSFER_HUB_VERSION=0.6.26 \
     TZ=Europe/Berlin
 EXPOSE 8080
 VOLUME ["/data"]

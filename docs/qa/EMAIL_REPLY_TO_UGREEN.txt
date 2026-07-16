@@ -1,0 +1,82 @@
+Subject: Re: Second review — clarifications, documentation & compliance link updates (six Runlevel apps)
+
+Dear UGREEN App Review Team,
+
+Thank you for the second review and the clear feedback. Below are our clarifications and the supporting materials.
+
+------------------------------------------------------------
+1) Target countries / regions & localization
+------------------------------------------------------------
+Initial launch regions:
+- Germany, Austria, Switzerland
+- English-speaking / international EU markets
+- China
+
+App Center / UPK localization (name, description, author, publisher, official, help, parameters):
+- en-US (fallback)
+- de-DE
+- zh-CN
+
+In-app UI follows the same language set. English is used when the system language is not listed.
+
+Document: LAUNCH_REGIONS.md (attached)
+
+------------------------------------------------------------
+2) Developer / Publisher information (URL identity)
+------------------------------------------------------------
+Developer / Publisher entity: Runlevel (Ivica Kampic)
+
+Clickable identity URLs in each UPK now point to our entity pages (not ugnas.com):
+
+- Official: https://github.com/runlevel1977-del/Runlevel-UGOS-Apps
+- Publisher link: https://github.com/runlevel1977-del
+
+------------------------------------------------------------
+3) Help documentation
+------------------------------------------------------------
+User-facing guides (per app) + index:
+
+- https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/README.md
+- Per-app: docs/help/statshub.md, transferhub.md, backupverifier.md,
+  wakesync.md, securityhub.md, lockandkey.md
+
+In-app footers also link to Help, Privacy, and Support.
+
+------------------------------------------------------------
+4) Technical Support field (UPK)
+------------------------------------------------------------
+Configured in each project.yaml as technical_support_link:
+
+- mailto:runlevel1977@posteo.de
+- https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues
+
+------------------------------------------------------------
+5) Supporting materials for testing
+------------------------------------------------------------
+Attached / included in this package:
+
+(a) CORE_WORKFLOWS.md — core workflow for each of the six apps
+(b) SELF_TEST_REPORT.md — self-test case report
+
+Also attached: LAUNCH_REGIONS.md
+
+------------------------------------------------------------
+Apps covered
+------------------------------------------------------------
+- com.runlevel.statshub
+- com.runlevel.transferhub
+- com.runlevel.backupverifier
+- com.runlevel.wakesync
+- com.runlevel.securityhub
+- com.runlevel.lockandkey
+
+We are attaching updated UPK packages with corrected official / publisher /
+technical_support / help metadata (same feature versions, new build numbers).
+
+Please let us know if any additional format (PDF) is required.
+
+Best regards,
+Ivica Kampic
+Runlevel
+runlevel1977@posteo.de
+https://github.com/runlevel1977-del/Runlevel-UGOS-Apps

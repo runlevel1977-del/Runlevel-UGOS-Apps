@@ -487,6 +487,21 @@ def smb_delete_source_tree(
         return False, str(e)
 
 
+def endpoint_path_list(ep: dict[str, Any]) -> list[str]:
+    """Return normalized folder paths for an endpoint (multi- or single-folder)."""
+    raw = ep.get("paths")
+    if isinstance(raw, list):
+        out: list[str] = []
+        for item in raw:
+            p = str(item or "").strip().strip("/")
+            if p not in out:
+                out.append(p)
+        if out:
+            return out
+    single = (ep.get("path") or "").strip().strip("/")
+    return [single]
+
+
 def endpoint_uses_smb(ep: dict[str, Any]) -> bool:
     device = get_device(ep.get("device_id", LOCAL_ID))
     return bool(device and device.get("type") == "smb")
@@ -510,7 +525,13 @@ def endpoint_label(ep: dict[str, Any]) -> str:
         return f"{name}:/{tail}"
     vol = normalize_volume_id(ep.get("volume"))
     sub = (ep.get("path") or "").strip().strip("/")
+    paths = endpoint_path_list(ep)
     vlabel = volume_label(vol)
+    if len(paths) > 1:
+        preview = ", ".join(paths[:3])
+        if len(paths) > 3:
+            preview += ", …"
+        return t("endpoint.multi_local", lng, name=name, count=len(paths), paths=preview)
     if sub:
         return f"{name} · {vlabel}:/{sub}"
     return f"{name} · {vlabel}{t('volume.whole', lng)}"

@@ -10,8 +10,8 @@ ENV RUNLEVEL_APPS_REPO=https://github.com/runlevel1977-del/Runlevel-UGOS-Apps \
     RUNLEVEL_PRIVACY_SLUG=wakesync \
     RUNLEVEL_CREDENTIAL_CONSENT=1
 ENV WAKE_SYNC_DATA=/data \
-    WAKE_SYNC_VERSION=0.1.26 \
+    WAKE_SYNC_VERSION=0.1.31 \
     TZ=Europe/Berlin
 EXPOSE 29120
 VOLUME ["/data"]
-CMD ["python3", "main.py"]
+CMD ["sh", "-c", "python3 -c 'import main' && exec python3 main.py"]

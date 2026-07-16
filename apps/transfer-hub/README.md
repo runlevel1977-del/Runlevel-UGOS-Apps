@@ -22,6 +22,7 @@ on the NAS.
 
 ## Documentation
 
+- [User guide](../../docs/help/transferhub.md)
 - [Help index](../../docs/help/README.md)
 - [Privacy policy](../../docs/privacy/transferhub.md)
 - [Third-party licenses](../../THIRD_PARTY_LICENSES.md)

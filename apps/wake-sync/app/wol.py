@@ -5,6 +5,7 @@ import os
 import re
 import socket
 import time
+from typing import Callable
 
 from store import append_log
 
@@ -209,6 +210,8 @@ def wait_for_host(
     port: int = 445,
     timeout_sec: int = 1200,
     poll_sec: int = 15,
+    *,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> tuple[bool, str]:
     host = (host or "").strip()
     if not host:
@@ -216,6 +219,9 @@ def wait_for_host(
     deadline = time.time() + max(30, int(timeout_sec))
     append_log(f"WAIT for {host}:{port} (max {int(timeout_sec)}s)")
     while time.time() < deadline:
+        if cancel_check and cancel_check():
+            append_log(f"WAIT cancelled — {host}:{port}")
+            return False, "cancelled"
         try:
             with socket.create_connection((host, port), timeout=8):
                 append_log(f"WAIT OK — {host}:{port} reachable")

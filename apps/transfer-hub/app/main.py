@@ -39,7 +39,7 @@ from store import (
 
 app = Flask(__name__)
 NAS_MOUNT = os.environ.get("NAS_MOUNT", "/mnt/nas")
-APP_VERSION = os.environ.get("TRANSFER_HUB_VERSION", "0.6.21")
+APP_VERSION = os.environ.get("TRANSFER_HUB_VERSION", "0.6.26")
 NAS_ADMIN_URL = os.environ.get(
     "NAS_ADMIN_URL",
     "https://github.com/runlevel1977-del/UgreenNASAdmin/releases/latest",
@@ -92,6 +92,7 @@ def _parse_profile_body(
     dest = body.get("dest")
     auto_sync = bool(body.get("auto_sync"))
     delete_source_after = bool(body.get("delete_source_after"))
+    smb_performance = bool(body.get("smb_performance"))
     if delete_source_after and auto_sync:
         return None, (t("err.move_with_auto", lng), 400)
     if delete_source_after:
@@ -127,6 +128,7 @@ def _parse_profile_body(
         "dest": dest,
         "auto_sync": auto_sync,
         "delete_source_after": delete_source_after,
+        "smb_performance": smb_performance,
         **sched,
     }, None
 

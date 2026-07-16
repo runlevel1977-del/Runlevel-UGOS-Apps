@@ -22,6 +22,7 @@ on the NAS.
 
 ## Documentation
 
+- [User guide](../../docs/help/wakesync.md)
 - [Help index](../../docs/help/README.md)
 - [Privacy policy](../../docs/privacy/wakesync.md)
 - [Third-party licenses](../../THIRD_PARTY_LICENSES.md)

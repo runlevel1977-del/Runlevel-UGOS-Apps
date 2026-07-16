@@ -58,8 +58,15 @@ def _rsync_exclude_args() -> list[str]:
     return args
 
 
-def _rclone_compat_args(src_ep: dict[str, Any], dst_ep: dict[str, Any]) -> list[str]:
+def _rclone_compat_args(
+    src_ep: dict[str, Any],
+    dst_ep: dict[str, Any],
+    *,
+    smb_performance: bool = False,
+) -> list[str]:
     """Work around rclone SMB multi-thread writes failing on Windows (signing required)."""
+    if smb_performance:
+        return []
     if endpoint_uses_smb(src_ep) or endpoint_uses_smb(dst_ep):
         return ["--disable", "OpenWriterAt,OpenChunkWriter"]
     return []
@@ -85,21 +92,29 @@ def _rclone_resilience_args() -> list[str]:
     ]
 
 
-def _rclone_common_args(src_ep: dict[str, Any], dst_ep: dict[str, Any]) -> list[str]:
+def _rclone_common_args(
+    src_ep: dict[str, Any],
+    dst_ep: dict[str, Any],
+    *,
+    smb_performance: bool = False,
+) -> list[str]:
     smb = endpoint_uses_smb(src_ep) or endpoint_uses_smb(dst_ep)
-    return [
+    args = [
         "-v",
         "--stats",
         "1s",
         "--stats-one-line",
         "--transfers",
-        "2" if smb else "4",
+        "4" if smb_performance and smb else ("2" if smb else "4"),
         "--checkers",
         "4" if smb else "8",
         *_rclone_resilience_args(),
-        *_rclone_compat_args(src_ep, dst_ep),
+        *_rclone_compat_args(src_ep, dst_ep, smb_performance=smb_performance),
         *_rclone_exclude_args(),
     ]
+    if smb_performance and smb:
+        args.extend(["--buffer-size", "64M"])
+    return args
 
 
 def _execute_rclone_copy(
@@ -111,24 +126,41 @@ def _execute_rclone_copy(
     on_progress: Callable[[str], None] | None,
     *,
     log_prefix: str = "",
+    smb_performance: bool = False,
 ) -> tuple[bool, str]:
-    cmd_base = ["rclone", "copy", src_url, dst_url, *_rclone_common_args(src_ep, dst_ep)]
+    modes = [True, False] if smb_performance else [False]
     last_output = ""
-    for attempt in range(1, _RCLONE_JOB_ATTEMPTS + 1):
-        if attempt > 1:
+    for perf_idx, perf in enumerate(modes):
+        if perf_idx > 0:
             append_log(
-                f"{log_prefix}Neuer Versuch {attempt}/{_RCLONE_JOB_ATTEMPTS} "
-                f"in {_RCLONE_JOB_RETRY_SLEEP}s …"
+                f"{log_prefix}Performance-Modus fehlgeschlagen — Fallback auf stabilen SMB-Modus …"
             )
-            time.sleep(_RCLONE_JOB_RETRY_SLEEP)
-        code, output = _run_subprocess(cmd_base, profile_id, on_progress=on_progress)
-        last_output = output
-        if code == 0 and not _rclone_had_errors(output):
+        cmd_base = [
+            "rclone",
+            "copy",
+            src_url,
+            dst_url,
+            *_rclone_common_args(src_ep, dst_ep, smb_performance=perf),
+        ]
+        for attempt in range(1, _RCLONE_JOB_ATTEMPTS + 1):
             if attempt > 1:
-                append_log(f"{log_prefix}Versuch {attempt} erfolgreich")
-            return True, output
-        tail = "\n".join(output.strip().splitlines()[-10:])
-        append_log(f"{log_prefix}Versuch {attempt}/{_RCLONE_JOB_ATTEMPTS} fehlgeschlagen:\n{tail}")
+                append_log(
+                    f"{log_prefix}Neuer Versuch {attempt}/{_RCLONE_JOB_ATTEMPTS} "
+                    f"in {_RCLONE_JOB_RETRY_SLEEP}s …"
+                )
+                time.sleep(_RCLONE_JOB_RETRY_SLEEP)
+            code, output = _run_subprocess(cmd_base, profile_id, on_progress=on_progress)
+            last_output = output
+            if code == 0 and not _rclone_had_errors(output):
+                if perf and smb_performance:
+                    append_log(f"{log_prefix}SMB Performance-Modus erfolgreich")
+                if attempt > 1:
+                    append_log(f"{log_prefix}Versuch {attempt} erfolgreich")
+                return True, output
+            tail = "\n".join(output.strip().splitlines()[-10:])
+            append_log(f"{log_prefix}Versuch {attempt}/{_RCLONE_JOB_ATTEMPTS} fehlgeschlagen:\n{tail}")
+        if not perf:
+            break
     return False, last_output
 
 
@@ -590,6 +622,7 @@ def _run_rclone_transfer(
     dst_ep: dict[str, Any],
     *,
     move: bool = False,
+    smb_performance: bool = False,
 ) -> tuple[bool, str]:
     lng = resolve_lang()
     src_url = rclone_remote_url(src_ep)
@@ -620,6 +653,7 @@ def _run_rclone_transfer(
         dst_ep,
         _progress,
         log_prefix=log_prefix,
+        smb_performance=smb_performance,
     )
     if not copy_ok:
         tail = "\n".join(output.strip().splitlines()[-12:])
@@ -658,15 +692,19 @@ def run_rsync_profile(profile: dict[str, Any]) -> tuple[bool, str]:
     dst_ep = _normalize_endpoint(profile.get("dest"))
     use_rclone = endpoint_uses_smb(src_ep) or endpoint_uses_smb(dst_ep)
     move = bool(profile.get("delete_source_after"))
+    smb_performance = bool(profile.get("smb_performance"))
     mode = "MOVE" if move else "COPY"
 
     try:
         if use_rclone:
+            perf_note = " | SMB Performance" if smb_performance else ""
             append_log(
-                f"START {profile.get('name')} | rclone {mode} "
+                f"START {profile.get('name')} | rclone {mode}{perf_note} "
                 f"{endpoint_label(src_ep)} -> {endpoint_label(dst_ep)}"
             )
-            ok, msg = _run_rclone_transfer(pid, src_ep, dst_ep, move=move)
+            ok, msg = _run_rclone_transfer(
+                pid, src_ep, dst_ep, move=move, smb_performance=smb_performance
+            )
         else:
             append_log(
                 f"START {profile.get('name')} | rsync {mode} "

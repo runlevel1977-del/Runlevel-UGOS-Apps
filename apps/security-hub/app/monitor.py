@@ -27,6 +27,29 @@ from store import append_log, load_settings, save_settings
 MAX_EVENTS = 2500
 LIVE_INTERVAL_SEC = 4
 HISTORY_DAYS_DEFAULT = 30
+IDLE_AFTER_SEC = 45.0  # no /api/events poll this long → pause log scraping
+IDLE_TICK_SEC = 30.0
+
+_last_client_at = 0.0
+_client_wake = threading.Event()
+
+
+def touch_client_activity() -> None:
+    """Browser tab open and polling — keep live log watch."""
+    global _last_client_at
+    was = _clients_active()
+    _last_client_at = time.time()
+    _client_wake.set()
+    if not was and _monitor is not None:
+        with _monitor._lock:
+            _monitor._needs_baseline = True
+        append_log("Access monitor resumed — UI active")
+
+
+def _clients_active() -> bool:
+    if _last_client_at <= 0:
+        return True
+    return (time.time() - _last_client_at) < IDLE_AFTER_SEC
 
 
 class AccessMonitor:
@@ -80,10 +103,26 @@ class AccessMonitor:
     def _loop(self) -> None:
         time.sleep(1.0)
         self.on_enter()
+        idle_logged = False
+        append_log(
+            f"Access monitor loop (full rate while UI open, pause after {int(IDLE_AFTER_SEC)}s without poll)"
+        )
         while not self._stop.is_set():
-            if self._watch_active:
-                self._poll_watch()
-            self._stop.wait(LIVE_INTERVAL_SEC)
+            if _clients_active():
+                if idle_logged:
+                    append_log("Access monitor resumed — full polling")
+                    idle_logged = False
+                    with self._lock:
+                        self._needs_baseline = True
+                if self._watch_active:
+                    self._poll_watch()
+                self._stop.wait(LIVE_INTERVAL_SEC)
+            else:
+                if not idle_logged:
+                    append_log("Access monitor paused — no UI")
+                    idle_logged = True
+                _client_wake.wait(timeout=IDLE_TICK_SEC)
+                _client_wake.clear()
 
     def is_busy(self) -> bool:
         with self._lock:

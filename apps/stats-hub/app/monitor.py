@@ -32,6 +32,7 @@ from ugos_poll import (
     fetch_ugos_metrics,
     last_ugos_status,
     last_ugos_volumes,
+    merge_disk_temps,
     merge_ifaces,
     merge_volumes,
     set_last_ugos_volumes,
@@ -41,14 +42,20 @@ from ugos_poll import (
 
 _HISTORY = 90
 # Main loop: light tick every TICK_SEC; heavy work on separate counters.
-TICK_SEC = 3.0
-DF_EVERY_N = 20          # ~60 s
+ACTIVE_TICK_SEC = 3.0
+IDLE_TICK_SEC = 30.0
+IDLE_AFTER_SEC = 45.0  # no visible browser tab polling this long → pause background work
+DF_EVERY_N = 20          # ~60 s active
 HW_SENSORS_EVERY_N = 10  # ~30 s (CPU temp, fan RPM)
 DOCKER_LIST_EVERY_N = 20  # ~60 s container list
 DOCKER_STATS_EVERY_N = 40  # ~120 s docker stats + system df
 SLOW_EVERY_N = 40        # ~120 s top processes + runlevel apps
 
 _lock = threading.Lock()
+_client_wake = threading.Event()
+_wake_refresh_lock = threading.Lock()
+_wake_refresh_running = False
+_last_client_at = 0.0
 _state: dict[str, Any] = {
     "ok": False,
     "cpu": None,
@@ -80,6 +87,94 @@ _state: dict[str, Any] = {
 _prev_cpu: tuple[int, int] | None = None
 _prev_net: dict[str, tuple[int, int]] = {}
 _running = False
+
+
+def touch_client_activity() -> None:
+    """Browser tab visible and polling — keep full monitor rate."""
+    global _last_client_at
+    was_active = _clients_active()
+    _last_client_at = time.time()
+    _client_wake.set()
+    if not was_active:
+        def _wake_worker() -> None:
+            global _wake_refresh_running
+            with _wake_refresh_lock:
+                if _wake_refresh_running:
+                    return
+                _wake_refresh_running = True
+            try:
+                _run_full_refresh()
+            finally:
+                _wake_refresh_running = False
+
+        threading.Thread(target=_wake_worker, daemon=True, name="stats-wake").start()
+
+
+def _clients_active() -> bool:
+    # Like 0.2.25 until we have seen UI polls; idle only after they stop.
+    if _last_client_at <= 0:
+        return True
+    return (time.time() - _last_client_at) < IDLE_AFTER_SEC
+
+
+def _wait_while_idle() -> None:
+    """Block until UI activity or idle sleep slice ends."""
+    while _running and not _clients_active():
+        _client_wake.wait(timeout=IDLE_TICK_SEC)
+        _client_wake.clear()
+
+
+def _run_full_refresh() -> None:
+    """Immediate collect when UI opens after idle — temps/fans/disks without waiting."""
+    append_log("Monitor wake — full refresh")
+    try:
+        bundle = collect_light_tick(include_hw_sensors=True)
+        df_text = collect_df_block()
+        _apply_tick(bundle, df_text=df_text, update_hw=True)
+    except Exception as ex:
+        append_log(f"Wake host refresh error: {ex}")
+    try:
+        raid = collect_raid()
+        disks = collect_disk_temps()
+        with _lock:
+            ug_disks = list(_state.get("ugos_disks") or [])
+        if ug_disks:
+            disks = merge_disk_temps(disks, ug_disks)
+        with _lock:
+            _state["raid"] = raid
+            _state["disk_temps"] = disks
+            _state["disk_temps_updated"] = int(time.time())
+    except Exception as ex:
+        append_log(f"Wake storage refresh error: {ex}")
+    try:
+        with _lock:
+            host_ifaces = list(_state.get("ifaces") or [])
+        ugos = fetch_ugos_metrics(force=True)
+        if ugos and ugos.get("ok"):
+            _apply_ugos(ugos, host_ifaces)
+        else:
+            _mark_ugos_fallback()
+    except Exception as ex:
+        append_log(f"Wake UGOS error: {ex}")
+    try:
+        dk = collect_docker(live_stats=True)
+        with _lock:
+            _state["docker"] = dk.get("containers", [])
+            _state["docker_df"] = dk.get("system_df", {})
+    except Exception as ex:
+        append_log(f"Wake docker error: {ex}")
+    try:
+        with _lock:
+            _state["processes"] = collect_top_processes(5)
+            _state["runlevel_apps"] = collect_runlevel_apps()
+    except Exception as ex:
+        append_log(f"Wake slow tick error: {ex}")
+    try:
+        os_info = collect_os_info()
+        with _lock:
+            _state["os"] = os_info
+    except Exception as ex:
+        append_log(f"Wake os info error: {ex}")
 
 
 def _push_hist(key: str, val: float | None) -> None:
@@ -201,9 +296,13 @@ def _apply_ugos(ugos: dict[str, Any], host_ifaces: list[dict[str, Any]]) -> None
             _state["data_source"] = "ugos"
             _state["ugos_model"] = str(ugos.get("model") or "")
             _state["ugos_pools"] = list(ugos.get("pools") or [])
-            _state["ugos_disks"] = list(ugos.get("disks") or [])
-            if not _state.get("disk_temps"):
-                ug_t = ugos_disks_to_temps(list(ugos.get("disks") or []))
+            ug_disks = list(ugos.get("disks") or [])
+            _state["ugos_disks"] = ug_disks
+            host_temps = list(_state.get("disk_temps") or [])
+            if host_temps and ug_disks:
+                _state["disk_temps"] = merge_disk_temps(host_temps, ug_disks)
+            elif not host_temps and ug_disks:
+                ug_t = ugos_disks_to_temps(ug_disks)
                 if ug_t:
                     _state["disk_temps"] = ug_t
             st = last_ugos_status()
@@ -224,9 +323,16 @@ def _disk_raid_loop() -> None:
     """Dedicated loop — smartctl can run longer than the UI poll interval."""
     append_log("Disk/RAID monitor started")
     while _running:
+        if not _clients_active():
+            _wait_while_idle()
+            continue
         try:
             raid = collect_raid()
             disks = collect_disk_temps()
+            with _lock:
+                ug_disks = list(_state.get("ugos_disks") or [])
+            if ug_disks:
+                disks = merge_disk_temps(disks, ug_disks)
             with _lock:
                 _state["raid"] = raid
                 _state["disk_temps"] = disks
@@ -236,19 +342,32 @@ def _disk_raid_loop() -> None:
             append_log(f"Storage refresh error: {ex}")
         interval = get_disk_poll_interval_sec()
         for _ in range(int(interval * 10)):
-            if not _running:
+            if not _running or not _clients_active() or _client_wake.is_set():
                 break
             time.sleep(0.1)
+        _client_wake.clear()
 
 
 def _loop() -> None:
     global _running
     append_log(
-        f"Monitor started (light tick {TICK_SEC}s, df ~{int(TICK_SEC * DF_EVERY_N)}s)"
+        f"Monitor started (full rate while UI open, pause after {int(IDLE_AFTER_SEC)}s without poll)"
     )
     tick = 0
     os_once = False
+    idle_logged = False
     while _running:
+        if not _clients_active():
+            if not idle_logged:
+                append_log("Monitor paused — UI tab closed or hidden")
+                idle_logged = True
+            _wait_while_idle()
+            tick = 0
+            continue
+        if idle_logged:
+            append_log("Monitor resumed — full polling")
+            idle_logged = False
+
         tick += 1
         host_ok = False
         try:
@@ -293,30 +412,35 @@ def _loop() -> None:
 
             if tick % SLOW_EVERY_N == 1:
                 try:
+                    procs = collect_top_processes(5)
+                    apps = collect_runlevel_apps()
                     with _lock:
-                        _state["processes"] = collect_top_processes(5)
-                        _state["runlevel_apps"] = collect_runlevel_apps()
+                        _state["processes"] = procs
+                        _state["runlevel_apps"] = apps
                 except Exception as ex:
                     append_log(f"Monitor slow tick error: {ex}")
 
             if not os_once:
                 try:
+                    os_info = collect_os_info()
                     with _lock:
-                        _state["os"] = collect_os_info()
+                        _state["os"] = os_info
                     os_once = True
                 except Exception as ex:
                     append_log(f"Monitor os info error: {ex}")
 
-        time.sleep(TICK_SEC)
+        time.sleep(ACTIVE_TICK_SEC)
 
 
 def snapshot() -> dict[str, Any]:
+    import copy
+
     with _lock:
-        import copy
-        out = copy.deepcopy(_state)
+        snap = copy.deepcopy(_state)
     from settings import settings_for_api
-    out["disk_settings"] = settings_for_api()
-    return out
+
+    snap["disk_settings"] = settings_for_api()
+    return snap
 
 
 def start_monitor() -> None:

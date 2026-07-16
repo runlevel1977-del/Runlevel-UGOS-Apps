@@ -103,6 +103,16 @@ def test_smb(host: str, username: str, password: str) -> tuple[bool, str]:
         return False, str(e)
 
 
+def is_windows_admin_share(name: str) -> bool:
+    """True for Windows hidden/admin shares (ADMIN$, C$, IPC$, …)."""
+    n = (name or "").strip()
+    if not n:
+        return True
+    if n in ("IPC$", "print$", "ADMIN$"):
+        return True
+    return n.endswith("$")
+
+
 def list_smb_shares(device: dict[str, Any]) -> list[dict[str, str]]:
     host = device["host"]
     cmd = [
@@ -118,7 +128,7 @@ def list_smb_shares(device: dict[str, Any]) -> list[dict[str, str]]:
         line = line.strip()
         if line.startswith("Disk|") and "|" in line:
             parts = line.split("|")
-            if len(parts) >= 2 and parts[1] not in ("IPC$", "print$"):
+            if len(parts) >= 2 and not is_windows_admin_share(parts[1]):
                 shares.append({"name": parts[1], "path": parts[1], "kind": "share"})
     return sorted(shares, key=lambda x: x["name"].lower())
 

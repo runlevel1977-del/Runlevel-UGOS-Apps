@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import threading
+from typing import Any
 
 from compliance import (
     compliance_context,
@@ -21,6 +22,7 @@ from devices import (
     delete_device,
     device_public_row,
     endpoint_label,
+    endpoint_path_list,
     get_device,
     load_devices,
     refresh_device_folder_cache,
@@ -31,14 +33,15 @@ from smb_cache import cache_summary, get_build_status, start_smb_cache_build
 from i18n import LANG_COOKIE, bundle, get_lang, lang_from_request, normalize_lang, t
 from icon_sync import sync_appcenter_icon
 from notify import public_settings, save_notify_settings, send_test_notifications
-from plans import delete_plan, list_active_plans, normalize_schedule_fields, schedule_label, start_plan
+from job_progress import list_active_jobs
+from plans import delete_plan, list_active_plans, normalize_schedule_fields, schedule_label, start_plan, stop_plan
 from scheduler import start_scheduler
 from store import DATA_DIR, append_log, get_plan, load_plans, new_plan_id, read_log_tail, save_plans
 from volumes import list_volumes, normalize_volume_id
 from wol import broadcast_for_ip, send_wol, wol_broadcast, wol_source_ips
 
 app = Flask(__name__)
-APP_VERSION = os.environ.get("WAKE_SYNC_VERSION", "0.1.26")
+APP_VERSION = os.environ.get("WAKE_SYNC_VERSION", "0.1.31")
 APP_PORT = int(os.environ.get("WAKE_SYNC_PORT", "29120"))
 NAS_ADMIN_URL = os.environ.get(
     "NAS_ADMIN_URL",
@@ -75,12 +78,31 @@ def _inject_i18n():
 def _normalize_endpoint(ep: dict) -> dict:
     device_id = (ep.get("device_id") or LOCAL_ID).strip() or LOCAL_ID
     dev = get_device(device_id)
-    out = {"device_id": device_id, "path": (ep.get("path") or "").strip().strip("/")}
+    paths = endpoint_path_list(ep)
+    out: dict[str, Any] = {
+        "device_id": device_id,
+        "path": paths[0] if len(paths) == 1 else "",
+        "paths": paths,
+    }
     if dev and dev.get("type") == "smb":
         out["share"] = (ep.get("share") or "").strip()
     else:
         out["volume"] = normalize_volume_id(ep.get("volume"))
     return out
+
+
+def _validate_source_endpoint(source: dict, lng: str) -> str | None:
+    paths = endpoint_path_list(source)
+    if not paths:
+        return t("err.pick_source_folders", lng)
+    if len(paths) > 1 and any(p == "" for p in paths):
+        return t("err.whole_volume_single", lng)
+    dev = get_device(source.get("device_id", LOCAL_ID))
+    if dev and dev.get("type") == "local" and not source.get("volume") and any(p != "" for p in paths):
+        return t("err.pick_volume_first", lng)
+    if dev and dev.get("type") == "smb" and not source.get("share"):
+        return t("err.smb_share_missing", lng)
+    return None
 
 
 def _wol_target_from_dest(dest: dict, mac: str, ip: str) -> tuple[str, str]:
@@ -105,6 +127,9 @@ def _plan_fields_from_body(body: dict, lng: str, existing: dict | None = None) -
         return t("err.pick_both", lng), {}
     source = _normalize_endpoint(source)
     dest = _normalize_endpoint(dest)
+    src_err = _validate_source_endpoint(source, lng)
+    if src_err:
+        return src_err, {}
     mac = (body.get("target_mac") or "").strip()
     ip = (body.get("target_ip") or "").strip()
     mac, ip = _wol_target_from_dest(dest, mac, ip)
@@ -131,6 +156,9 @@ def _plan_fields_from_body(body: dict, lng: str, existing: dict | None = None) -
         "wake_broadcast": wake_bc,
         "ready_wait_minutes": max(1, min(120, int(body.get("ready_wait_minutes") or (existing or {}).get("ready_wait_minutes") or 20))),
         "ready_port": int(body.get("ready_port") or (existing or {}).get("ready_port") or 445),
+        "smb_performance": bool(
+            body.get("smb_performance", (existing or {}).get("smb_performance", False))
+        ),
         "source": source,
         "dest": dest,
     }
@@ -352,6 +380,19 @@ def api_run_plan(plan_id: str):
     if not ok:
         return jsonify({"ok": False, "error": msg}), 400
     return jsonify({"ok": True, "message": msg})
+
+
+@app.route("/api/plans/<plan_id>/stop", methods=["POST"])
+def api_stop_plan(plan_id: str):
+    ok, msg = stop_plan(plan_id)
+    if not ok:
+        return jsonify({"ok": False, "error": msg}), 400
+    return jsonify({"ok": True, "message": msg})
+
+
+@app.route("/api/jobs/active", methods=["GET"])
+def api_active_jobs():
+    return jsonify({"ok": True, "jobs": list_active_jobs()})
 
 
 @app.route("/api/plans/<plan_id>", methods=["DELETE"])

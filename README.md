@@ -16,12 +16,21 @@ Official open-source repository for **Runlevel** Docker applications on
 
 | Field | URLs |
 | --- | --- |
+| Official | https://github.com/runlevel1977-del/Runlevel-UGOS-Apps |
+| Publisher | https://github.com/runlevel1977-del |
 | License | https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/EULA.md, https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/LICENSE |
 | Source | https://github.com/runlevel1977-del/Runlevel-UGOS-Apps, https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/THIRD_PARTY_LICENSES.md |
-| Support | mailto:runlevel1977@posteo.de, https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues, https://github.com/runlevel1977-del/UgreenNASAdmin/issues |
-| Help | https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/README.md |
+| Support | mailto:runlevel1977@posteo.de, https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues |
+| Help | https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/README.md (per-app guides in `docs/help/`) |
 
 Per-app `privacy_policy_link` values point to `docs/privacy/<app>.md`.
+
+## QA / App Center review materials
+
+- [Launch regions & localization](docs/qa/LAUNCH_REGIONS.md)
+- [Core workflows](docs/qa/CORE_WORKFLOWS.md)
+- [Self-test report](docs/qa/SELF_TEST_REPORT.md)
+- [Email reply draft](docs/qa/EMAIL_REPLY_TO_UGREEN.txt)
 
 ## Windows companion
 

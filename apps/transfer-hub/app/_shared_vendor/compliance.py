@@ -23,7 +23,7 @@ def public_links() -> dict[str, str]:
         "license": f"{base}/blob/main/LICENSE",
         "third_party": f"{base}/blob/main/THIRD_PARTY_LICENSES.md",
         "source": base,
-        "help": f"{base}/blob/main/docs/help/README.md",
+        "help": f"{base}/blob/main/docs/help/{PRIVACY_SLUG}.md",
         "support_email": f"mailto:{SUPPORT_EMAIL}",
         "issues": f"{base}/issues",
         "companion": "https://github.com/runlevel1977-del/UgreenNASAdmin",

@@ -9,7 +9,7 @@ ENV RUNLEVEL_APPS_REPO=https://github.com/runlevel1977-del/Runlevel-UGOS-Apps \
     RUNLEVEL_PRIVACY_SLUG=statshub \
     RUNLEVEL_CREDENTIAL_CONSENT=0
 ENV STATS_HUB_DATA=/data \
-    STATS_HUB_VERSION=0.2.22 \
+    STATS_HUB_VERSION=0.2.32 \
     STATS_HUB_PORT=29125 \
     TZ=Europe/Berlin
 EXPOSE 8080

@@ -16,12 +16,13 @@ from flask import Flask, g, jsonify, make_response, render_template, request
 from collect import probe_disk_temps, scan_top_folders
 from icon_sync import sync_appcenter_icon
 from i18n import LANG_COOKIE, bundle, get_lang, lang_from_request, normalize_lang, t
-from monitor import set_top_folders, snapshot, start_monitor
+from monitor import set_top_folders, snapshot, start_monitor, touch_client_activity
 from settings import INTERVAL_CHOICES, load_settings, save_settings, settings_for_api
+from ugos_poll import reset_ugos_client, test_ugos_connection
 from store import DATA_DIR, append_log, read_log_tail
 
 app = Flask(__name__)
-APP_VERSION = os.environ.get("STATS_HUB_VERSION", "0.2.22")
+APP_VERSION = os.environ.get("STATS_HUB_VERSION", "0.2.32")
 NAS_ADMIN_URL = os.environ.get(
     "NAS_ADMIN_URL",
     "https://github.com/runlevel1977-del/UgreenNASAdmin/releases/latest",
@@ -63,6 +64,7 @@ def health():
 
 @app.route("/")
 def index():
+    touch_client_activity()
     resp = make_response(render_template("index.html", version=APP_VERSION))
     picked = normalize_lang(request.args.get("lang"))
     if picked:
@@ -82,6 +84,7 @@ def api_lang():
 
 @app.route("/api/snapshot")
 def api_snapshot():
+    touch_client_activity()
     snap = copy.deepcopy(snapshot())
     return jsonify({"ok": True, "snapshot": snap, "version": APP_VERSION})
 
@@ -136,7 +139,29 @@ def api_settings_post():
         saved = save_settings(body)
     except (TypeError, ValueError) as ex:
         return jsonify({"ok": False, "error": str(ex)}), 400
+    if "ugos_api" in body:
+        reset_ugos_client()
     return jsonify({"ok": True, "settings": saved})
+
+
+@app.route("/api/ugos/test", methods=["POST"])
+def api_ugos_test():
+    """Test UGOS API login with posted or saved credentials (any port)."""
+    body = request.get_json(force=True, silent=True) or {}
+    cur = load_settings().get("ugos_api") or {}
+    patch = body.get("ugos_api") if isinstance(body.get("ugos_api"), dict) else body
+    cfg = dict(cur)
+    if isinstance(patch, dict):
+        for key in ("host", "port", "username", "use_https", "verify_ssl", "enabled"):
+            if key in patch:
+                cfg[key] = patch[key]
+        if str(patch.get("password") or "").strip():
+            cfg["password"] = str(patch["password"])
+    ok, err = test_ugos_connection(cfg)
+    if ok:
+        reset_ugos_client()
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": err or "unknown"})
 
 
 @app.route("/api/disk-probe")

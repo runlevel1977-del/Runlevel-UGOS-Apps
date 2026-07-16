@@ -8,9 +8,17 @@ from zoneinfo import ZoneInfo
 
 from devices import endpoint_label
 from i18n import get_lang, set_thread_lang, t
+from job_progress import (
+    clear_cancel,
+    finish_job,
+    init_job,
+    is_cancelled,
+    request_cancel,
+    set_job,
+)
 from notify import notify_event
 from store import append_log, get_plan, load_plans, save_plans, update_plan
-from sync import run_sync
+from sync import run_sync_plan
 from wol import send_wol, wait_for_host
 
 _running_lock = threading.Lock()
@@ -22,6 +30,18 @@ SCHEDULE_TYPES = ("daily", "weekly", "biweekly", "monthly")
 def list_active_plans() -> list[str]:
     with _running_lock:
         return sorted(_running_ids)
+
+
+def stop_plan(plan_id: str, lang: str | None = None) -> tuple[bool, str]:
+    """Request cancellation of a running plan."""
+    lng = lang or get_lang()
+    with _running_lock:
+        if plan_id not in _running_ids:
+            return False, t("err.plan_not_running", lng)
+    request_cancel(plan_id)
+    set_job(plan_id, detail=t("plan.stopping", lng))
+    append_log(f"PLAN stop requested {plan_id}")
+    return True, t("plan.stop_requested", lng)
 
 
 def _set_running(plan_id: str, on: bool) -> None:
@@ -189,6 +209,8 @@ def start_plan(plan_id: str, lang: str | None = None, *, manual: bool = False) -
 
     def worker() -> None:
         set_thread_lang(lng)
+        clear_cancel(plan_id)
+        init_job(plan, lang=lng)
         _set_running(plan_id, True)
         today = _today_key()
         now_iso = datetime.now(timezone.utc).isoformat()
@@ -204,50 +226,84 @@ def start_plan(plan_id: str, lang: str | None = None, *, manual: bool = False) -
         append_log(f"PLAN {name} START ({'manual' if manual else 'scheduled'})")
         append_log(f"ROUTE {route}")
 
+        def _cancelled() -> bool:
+            return is_cancelled(plan_id)
+
         try:
+            set_job(plan_id, phase="wol", detail=t("jobs.phase.wol", lng), percent=0, speed="", eta="")
             wake_ok, wake_msg = send_wol(
                 plan.get("target_mac", ""),
                 plan.get("wake_broadcast") or None,
                 target_ip=plan.get("target_ip", ""),
             )
             append_log(f"WOL {'OK' if wake_ok else 'FAIL'}: {wake_msg}")
+            if _cancelled():
+                msg = t("plan.cancelled", lng)
+                update_plan(plan_id, last_status="cancelled", last_message=msg)
+                finish_job(plan_id, status="cancelled", message=msg, lang=lng)
+                return
             if not wake_ok:
                 msg = t("plan.fail_wol", lng, detail=wake_msg[:200])
                 update_plan(plan_id, last_status="fail", last_message=msg)
+                finish_job(plan_id, status="error", message=msg, lang=lng)
                 notify_event(name, route, msg, lng, success=False)
                 return
 
             wait_min = max(1, min(120, int(plan.get("ready_wait_minutes") or 20)))
+            set_job(plan_id, phase="wait", detail=t("jobs.phase.wait", lng), percent=0, speed="", eta="")
             ready_ok, ready_msg = wait_for_host(
                 plan.get("target_ip", ""),
                 int(plan.get("ready_port") or 445),
                 timeout_sec=wait_min * 60,
+                cancel_check=_cancelled,
             )
             append_log(f"READY {'OK' if ready_ok else 'FAIL'}: {ready_msg}")
+            if _cancelled() or ready_msg == "cancelled":
+                msg = t("plan.cancelled", lng)
+                update_plan(plan_id, last_status="cancelled", last_message=msg)
+                finish_job(plan_id, status="cancelled", message=msg, lang=lng)
+                return
             if not ready_ok:
                 msg = t("plan.fail_wait", lng, detail=ready_msg[:200])
                 update_plan(plan_id, last_status="fail", last_message=msg)
+                finish_job(plan_id, status="error", message=msg, lang=lng)
                 notify_event(name, route, msg, lng, success=False)
                 return
 
-            ok, code, details = run_sync(plan.get("source") or {}, plan.get("dest") or {})
+            ok, code, details = run_sync_plan(
+                plan.get("source") or {},
+                plan.get("dest") or {},
+                plan_id=plan_id,
+                phase_label=t("jobs.phase.sync", lng),
+                smb_performance=bool(plan.get("smb_performance")),
+            )
+            if _cancelled() or code == "cancelled":
+                msg = t("plan.cancelled", lng)
+                update_plan(plan_id, last_status="cancelled", last_message=msg)
+                finish_job(plan_id, status="cancelled", message=msg, lang=lng)
+                append_log(f"PLAN {plan_id} CANCELLED")
+                return
             if ok:
                 msg = t("plan.ok", lng)
                 update_plan(plan_id, last_status="ok", last_message=msg, last_details=details)
                 append_log(f"PLAN {plan_id} OK")
+                finish_job(plan_id, status="ok", message=msg, lang=lng)
                 notify_event(name, route, msg, lng, success=True)
             else:
                 tail = (details.get("tail") or code)[:300]
                 msg = t("plan.fail_sync", lng, detail=tail)
                 update_plan(plan_id, last_status="fail", last_message=msg, last_details=details)
                 append_log(f"PLAN {plan_id} FAIL: {msg}")
+                finish_job(plan_id, status="error", message=msg, lang=lng)
                 notify_event(name, route, msg, lng, success=False)
         except Exception as ex:
             err = str(ex)[:400]
             append_log(f"PLAN {plan_id} ERROR: {ex}")
             update_plan(plan_id, last_status="fail", last_message=err)
+            finish_job(plan_id, status="error", message=err, lang=lng)
             notify_event(name, route, err, lng, success=False)
         finally:
+            clear_cancel(plan_id)
             _set_running(plan_id, False)
             set_thread_lang(None)
 

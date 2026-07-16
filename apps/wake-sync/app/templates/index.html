@@ -6,7 +6,25 @@
   <title>{{ t('app.title') }}</title>
   <style>
     :root { --bg:#0f1419; --card:#1a2332; --accent:#e8a060; --ok:#2d9f6f; --bad:#c44; --text:#e8eef4; --muted:#8fa3b8; --border:#334; }
-    body { font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); margin:0; padding:1.25rem; max-width:960px; }
+    * { box-sizing: border-box; }
+    body { font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); margin:0; padding:1.25rem; }
+    .app-layout { display:flex; flex-wrap:wrap; gap:1.25rem; align-items:flex-start; max-width:1400px; }
+    .main-column { flex:1 1 560px; min-width:0; max-width:960px; }
+    .jobs-panel { flex:0 0 300px; width:300px; max-width:100%; position:sticky; top:1.25rem; max-height:calc(100vh - 2.5rem); overflow-y:auto; margin-bottom:1rem; }
+    .job-item { margin-bottom:1.1rem; padding-bottom:1.1rem; border-bottom:1px solid var(--border); }
+    .job-item:last-child { margin-bottom:0; padding-bottom:0; border-bottom:none; }
+    .job-item .job-name { font-weight:600; font-size:0.92rem; margin:0 0 0.2rem; }
+    .job-item .job-route { font-size:0.72rem; color:var(--muted); line-height:1.35; margin-bottom:0.5rem; word-break:break-word; }
+    .progress-track { height:10px; background:#0a0e12; border-radius:5px; overflow:hidden; border:1px solid var(--border); }
+    .progress-fill { height:100%; background:var(--accent); width:0%; transition:width 0.35s ease; border-radius:4px; }
+    .progress-fill.indeterminate { width:40% !important; animation:job-slide 1.4s ease-in-out infinite; }
+    .progress-fill.ok { background:var(--ok); }
+    .progress-fill.error { background:var(--bad); }
+    .progress-fill.cancelled { background:#886644; }
+    @keyframes job-slide { 0% { margin-left:0; } 50% { margin-left:60%; } 100% { margin-left:0; } }
+    .job-meta { font-size:0.75rem; color:var(--muted); margin-top:0.4rem; line-height:1.4; }
+    .jobs-empty { font-size:0.85rem; color:var(--muted); }
+    .job-stop { margin-top:0.45rem; font-size:0.82rem; padding:0.3rem 0.65rem; }
     .page-header { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:.5rem; }
     .page-header .title-block { flex:1; min-width:220px; }
     .lang-switch { display:flex; align-items:center; gap:.35rem; flex-shrink:0; }
@@ -36,6 +54,9 @@
     .dir-list li { padding:.35rem 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:.5rem; flex-wrap:wrap; }
     .dir-list li .row-label { flex:1; min-width:120px; }
     .dir-list li .row-actions { white-space:nowrap; }
+    .dir-list li .row-check { margin-right:.35rem; }
+    .folder-chips { display:flex; flex-wrap:wrap; gap:.35rem; margin:.35rem 0; min-height:1.6rem; }
+    .folder-chip { display:inline-flex; align-items:center; gap:.35rem; background:#0a0e12; border:1px solid var(--border); border-radius:6px; padding:.25rem .5rem; font-size:.82rem; }
     pre { background:#0a0e12; padding:.75rem; overflow:auto; max-height:200px; font-size:.78rem; white-space:pre-wrap; }
     .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; max-width:520px; }
     @media(max-width:600px){ .grid2 { grid-template-columns:1fr; } }
@@ -57,6 +78,9 @@
       <button type="button" class="lang-btn{% if lang == 'en' %} active{% endif %}" onclick="setLang('en')"{% if lang == 'en' %} aria-current="true"{% endif %}>EN</button>
     </div>
   </header>
+
+  <div class="app-layout">
+  <div class="main-column">
 
   <div class="card">
     <h2>{{ t('devices.target') }}</h2>
@@ -105,11 +129,14 @@
     </div>
     <p class="hint">{{ t('plan.wol_info') }} <span id="wolPreview"></span></p>
     <p><strong>{{ t('plan.source') }}</strong></p>
+    <p class="hint">{{ t('job.sync_incremental_hint') }}</p>
     <div class="pick">
       <select id="src-device" style="min-width:180px"></select>
-      <span class="sel" id="src-label">{{ t('job.pick_none') }}</span>
       <button type="button" class="secondary" onclick="openPicker('src')">{{ t('job.pick') }}</button>
     </div>
+    <p class="hint" style="margin:.25rem 0 .35rem">{{ t('job.selected_folders') }}</p>
+    <div class="folder-chips" id="src-selected"></div>
+    <p class="hint" id="src-empty-hint">{{ t('job.pick_none') }}</p>
     <p><strong>{{ t('plan.dest') }}</strong></p>
     <div class="pick">
       <select id="dst-device" style="min-width:180px"></select>
@@ -117,6 +144,8 @@
       <button type="button" class="secondary" onclick="openPicker('dst')">{{ t('job.pick') }}</button>
     </div>
     <p><label><input type="checkbox" id="penabled" checked /> {{ t('plan.enabled') }}</label></p>
+    <p><label><input type="checkbox" id="smbPerformance" /> {{ t('plan.smb_performance') }}</label></p>
+    <p class="hint">{{ t('plan.smb_performance_hint') }}</p>
     <button type="button" id="planSaveBtn" onclick="savePlan()">{{ t('plan.save') }}</button>
     <button type="button" id="planCancelBtn" class="secondary" style="display:none" onclick="cancelEditPlan()">{{ t('plan.cancel_edit') }}</button>
   </div>
@@ -151,6 +180,15 @@
     <pre id="log"></pre>
   </div>
 
+  </div>
+
+  <aside class="card jobs-panel" aria-live="polite">
+    <h2>{{ t('jobs.active_title') }}</h2>
+    <div id="active-jobs" class="jobs-empty">{{ t('jobs.none') }}</div>
+  </aside>
+
+  </div>
+
   <div id="modal-dev" class="modal"><div class="modal-box">
     <h2>{{ t('modal.add_device') }}</h2>
     <input type="hidden" id="md-host" />
@@ -167,10 +205,17 @@
   <div id="modal-pick" class="modal"><div class="modal-box wide">
     <h2>{{ t('modal.pick_folder') }}</h2>
     <p class="hint" id="pick-hint">{{ t('modal.pick_hint') }}</p>
+    <p class="hint" id="pick-multi-hint" style="display:none">{{ t('job.pick_multi_hint') }}</p>
     <p class="hint" id="pick-breadcrumb"></p>
     <button type="button" class="link" id="pick-up" onclick="pickUp()" style="display:none">{{ t('modal.pick_up') }}</button>
     <ul class="dir-list" id="pick-list"></ul>
-    <button type="button" class="ok" onclick="confirmPickHere()">{{ t('modal.pick_here') }}</button>
+    <div id="pick-src-actions" style="display:none">
+      <button type="button" class="ok" onclick="addCheckedSrcFolders()">{{ t('job.pick_add_checked') }}</button>
+      <button type="button" class="secondary" onclick="replaceWithCurrentPick()">{{ t('job.pick_replace_here') }}</button>
+    </div>
+    <div id="pick-dst-actions">
+      <button type="button" class="ok" onclick="confirmPickHere()">{{ t('modal.pick_here') }}</button>
+    </div>
     <button type="button" class="secondary" onclick="closeM('modal-pick')">{{ t('modal.cancel') }}</button>
   </div></div>
 
@@ -197,7 +242,7 @@
 
     function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
     function closeM(id){ document.getElementById(id).classList.remove('open'); }
-    let devices=[], volumeLabels={}, srcSel=null, dstSel=null, pickSide='src';
+    let devices=[], volumeLabels={}, srcPaths=[], dstSel=null, pickSide='src';
     let pickState={device_id:'local',share:'',path:'',volume:''};
     let cachedPlans=[], editPlanId=null;
 
@@ -213,6 +258,90 @@
     function deviceOptionsHtml(){
       return devices.map(d=>'<option value="'+esc(d.id)+'">'+esc(d.name)+' ('+esc(d.type)+')</option>').join('');
     }
+
+    function srcPathKey(ep){
+      return [ep.device_id, ep.volume||'', ep.share||'', ep.path||''].join('|');
+    }
+
+    function refreshSrcSelected(){
+      const box = document.getElementById('src-selected');
+      const empty = document.getElementById('src-empty-hint');
+      box.innerHTML = '';
+      if(!srcPaths.length){
+        empty.style.display = '';
+        return;
+      }
+      empty.style.display = 'none';
+      srcPaths.forEach((ep, idx)=>{
+        const chip = document.createElement('span');
+        chip.className = 'folder-chip';
+        chip.innerHTML = esc(endpointDisplayLabel(ep)) + ' <button type="button" class="link" onclick="removeSrcPath('+idx+')">×</button>';
+        box.appendChild(chip);
+      });
+    }
+
+    function removeSrcPath(idx){
+      srcPaths.splice(idx, 1);
+      refreshSrcSelected();
+    }
+
+    function currentPickEndpoint(){
+      return {
+        device_id: pickState.device_id,
+        share: pickState.share||'',
+        path: pickState.path||'',
+        volume: pickState.volume||'',
+      };
+    }
+
+    function validatePickEndpoint(ep){
+      const dev = devices.find(d=>d.id===ep.device_id);
+      if(dev && dev.type==='local' && !ep.volume){ alert(T('err.pick_volume_first')); return false; }
+      if(dev && dev.type==='smb' && !ep.share){ alert(T('err.pick_share_first')); return false; }
+      return true;
+    }
+
+    function addSrcEndpoint(ep, replace){
+      if(!validatePickEndpoint(ep)) return;
+      if(replace){
+        srcPaths = [ep];
+      } else {
+        const key = srcPathKey(ep);
+        if(!srcPaths.some(p=>srcPathKey(p)===key)) srcPaths.push(ep);
+      }
+      document.getElementById('src-device').value = ep.device_id;
+      refreshSrcSelected();
+    }
+
+    function endpointFromPickEntry(e){
+      const ep = currentPickEndpoint();
+      if(e.kind==='volume'){ ep.volume=e.volume||''; ep.path=''; ep.share=''; }
+      else if(e.kind==='share'){ ep.share=e.name; ep.path=''; }
+      else if(e.kind==='dir'){ ep.path=e.path; }
+      return ep;
+    }
+
+    function addCheckedSrcFolders(){
+      const checks = document.querySelectorAll('#pick-list input[data-pick-check]:checked');
+      if(!checks.length){
+        addSrcEndpoint(currentPickEndpoint(), false);
+        closeM('modal-pick');
+        return;
+      }
+      for(const cb of checks){
+        const idx = parseInt(cb.getAttribute('data-pick-idx'), 10);
+        const e = pickEntries[idx];
+        if(e) addSrcEndpoint(endpointFromPickEntry(e), false);
+      }
+      closeM('modal-pick');
+    }
+
+    function replaceWithCurrentPick(){
+      addSrcEndpoint(currentPickEndpoint(), true);
+      closeM('modal-pick');
+    }
+
+    let pickEntries = [];
 
     function endpointDisplayLabel(ep){
       const dev = devices.find(d=>d.id===ep.device_id);
@@ -387,10 +516,13 @@
           return;
         }
       }
-      const cur = side==='src' ? srcSel : dstSel;
+      const cur = side==='dst' ? dstSel : (srcPaths.length ? srcPaths[srcPaths.length-1] : null);
       pickState = cur
         ? { device_id: cur.device_id, share: cur.share||'', path: cur.path||'', volume: cur.volume||'' }
         : { device_id: devId, share:'', path:'', volume:'' };
+      document.getElementById('pick-multi-hint').style.display = side==='src' ? '' : 'none';
+      document.getElementById('pick-src-actions').style.display = side==='src' ? '' : 'none';
+      document.getElementById('pick-dst-actions').style.display = side==='dst' ? '' : 'none';
       document.getElementById('modal-pick').classList.add('open');
       loadPickList();
     }
@@ -423,9 +555,18 @@
       const canUp = j.share || j.path || j.volume;
       document.getElementById('pick-up').style.display = canUp ? 'inline' : 'none';
       const ul = document.getElementById('pick-list'); ul.innerHTML='';
-      for(const e of (j.entries||[])){
+      pickEntries = j.entries || [];
+      pickEntries.forEach((e, idx)=>{
         const li = document.createElement('li');
         const icon = e.kind==='volume' ? '📦 ' : e.kind==='share' ? '📁 ' : '📂 ';
+        if(pickSide==='src' && (e.kind==='volume' || e.kind==='share' || e.kind==='dir')){
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.className = 'row-check';
+          cb.setAttribute('data-pick-check', '1');
+          cb.setAttribute('data-pick-idx', String(idx));
+          li.appendChild(cb);
+        }
         const label = document.createElement('span');
         label.className='row-label';
         label.textContent = icon+e.name;
@@ -448,7 +589,7 @@
         }
         if(acts.innerHTML) li.appendChild(acts);
         ul.appendChild(li);
-      }
+      });
     }
 
     function openPickEntry(e){
@@ -462,9 +603,11 @@
       if(e.kind==='volume'){ pickState.volume=e.volume||''; pickState.path=''; pickState.share=''; }
       else if(e.kind==='share'){ pickState.share=e.name; pickState.path=''; }
       else if(e.kind==='dir'){ pickState.path=e.path; }
-      const dev = devices.find(d=>d.id===pickState.device_id);
-      if(dev && dev.type==='local' && !pickState.volume){ alert(T('err.pick_volume_first')); return; }
-      if(dev && dev.type==='smb' && !pickState.share){ alert(T('err.pick_share_first')); return; }
+      if(pickSide==='src'){
+        addSrcEndpoint(endpointFromPickEntry(e), true);
+        closeM('modal-pick');
+        return;
+      }
       confirmPickHere();
     }
 
@@ -482,18 +625,13 @@
     }
 
     function confirmPickHere(){
-      const dev = devices.find(d=>d.id===pickState.device_id);
-      if(dev && dev.type==='local' && !pickState.volume){ alert(T('err.pick_volume_first')); return; }
-      if(dev && dev.type==='smb' && !pickState.share){ alert(T('err.pick_share_first')); return; }
-      const ep = { device_id: pickState.device_id, share: pickState.share||'', path: pickState.path||'', volume: pickState.volume||'' };
-      const label = endpointDisplayLabel(ep);
+      const ep = currentPickEndpoint();
+      if(!validatePickEndpoint(ep)) return;
       if(pickSide==='src'){
-        srcSel = ep;
-        document.getElementById('src-label').textContent = label;
-        document.getElementById('src-device').value = ep.device_id;
+        addSrcEndpoint(ep, true);
       } else {
         dstSel = ep;
-        document.getElementById('dst-label').textContent = label;
+        document.getElementById('dst-label').textContent = endpointDisplayLabel(ep);
         document.getElementById('dst-device').value = ep.device_id;
         updateWolPreview();
       }
@@ -528,8 +666,10 @@
       document.getElementById('scheduleWeekday').value = '0';
       document.getElementById('monthlyWeek').value = '1';
       document.getElementById('penabled').checked = true;
-      srcSel = dstSel = null;
-      document.getElementById('src-label').textContent = T('job.pick_none');
+      document.getElementById('smbPerformance').checked = false;
+      srcPaths = [];
+      dstSel = null;
+      refreshSrcSelected();
       document.getElementById('dst-label').textContent = T('job.pick_none');
       updateScheduleUi();
       updateWolPreview();
@@ -553,19 +693,43 @@
       document.getElementById('scheduleWeekday').value = String(p.weekday!=null?p.weekday:0);
       document.getElementById('monthlyWeek').value = String(p.monthly_week!=null?p.monthly_week:1);
       document.getElementById('penabled').checked = !!p.enabled;
+      document.getElementById('smbPerformance').checked = !!p.smb_performance;
       updateScheduleUi();
-      srcSel = Object.assign({}, p.source||{});
+      const src = Object.assign({}, p.source||{});
+      const paths = Array.isArray(src.paths) && src.paths.length
+        ? src.paths.map(x=>String(x||''))
+        : [String(src.path||'')];
+      srcPaths = paths.map(path=>({
+        device_id: src.device_id||'local',
+        share: src.share||'',
+        volume: src.volume||'',
+        path: path,
+      }));
       dstSel = Object.assign({}, p.dest||{});
-      document.getElementById('src-device').value = srcSel.device_id||'local';
+      document.getElementById('src-device').value = srcPaths[0]?.device_id||'local';
       document.getElementById('dst-device').value = dstSel.device_id||'';
-      document.getElementById('src-label').textContent = endpointDisplayLabel(srcSel);
+      refreshSrcSelected();
       document.getElementById('dst-label').textContent = endpointDisplayLabel(dstSel);
       updateWolPreview();
       document.getElementById('plan-form-card').scrollIntoView({behavior:'smooth', block:'start'});
     }
 
+    function buildSourcePayload(){
+      if(!srcPaths.length) return null;
+      const base = {...srcPaths[0], device_id: document.getElementById('src-device').value};
+      const paths = srcPaths.map(p=>(p.path||'').trim()).filter((p, i, arr)=> arr.indexOf(p)===i);
+      return {
+        device_id: base.device_id,
+        share: base.share||'',
+        volume: base.volume||'',
+        paths,
+        path: paths.length===1 ? paths[0] : '',
+      };
+    }
+
     async function savePlan(){
-      if(!srcSel||!dstSel){ alert(T('err.pick_both')); return; }
+      const source = buildSourcePayload();
+      if(!source||!dstSel){ alert(T('err.pick_both')); return; }
       const dest = {...dstSel, device_id: document.getElementById('dst-device').value};
       const runTime = document.getElementById('runAt').value||'12:30';
       const body = {
@@ -575,8 +739,9 @@
         weekday: parseInt(document.getElementById('scheduleWeekday').value, 10),
         monthly_week: parseInt(document.getElementById('monthlyWeek').value, 10),
         enabled: document.getElementById('penabled').checked,
+        smb_performance: document.getElementById('smbPerformance').checked,
         ready_wait_minutes: parseInt(document.getElementById('readyWait').value,10)||20,
-        source: srcSel,
+        source,
         dest,
       };
       const url = editPlanId ? ('/api/plans/'+editPlanId) : '/api/plans';
@@ -592,16 +757,98 @@
       const tb = document.getElementById('plans-body'); tb.innerHTML='';
       for(const p of cachedPlans){
         const tr = document.createElement('tr');
-        const st = p.running ? T('plan.running') : (p.last_status==='ok'?T('plan.status_ok'):(p.last_status==='fail'?T('plan.status_fail'):T('plan.status_never')));
-        tr.innerHTML = '<td>'+esc(p.name)+'</td><td><small>'+esc(p.source_label)+' → '+esc(p.dest_label)+'</small></td><td>'+esc(p.schedule_label||p.run_at)+'</td><td>'+st+'</td><td>'+
-          '<button class="secondary" onclick="editPlan(\''+esc(p.id)+'\')" '+(p.running?'disabled':'')+'>'+T('plan.edit_btn')+'</button>'+
-          '<button class="ok" onclick="runPlan(\''+esc(p.id)+'\')" '+(p.running?'disabled':'')+'>'+T('plan.run')+'</button>'+
-          '<button class="danger" onclick="delPlan(\''+esc(p.id)+'\')">'+T('plan.delete')+'</button></td>';
+        let st = T('plan.status_never');
+        if(p.running) st = T('plan.running');
+        else if(p.last_status==='ok') st = T('plan.status_ok');
+        else if(p.last_status==='cancelled') st = T('plan.status_cancelled');
+        else if(p.last_status==='fail') st = T('plan.status_fail');
+        const actions = [];
+        if(p.running){
+          actions.push('<button class="danger" onclick="stopPlan(\''+esc(p.id)+'\')">'+T('plan.stop')+'</button>');
+        } else {
+          actions.push('<button class="secondary" onclick="editPlan(\''+esc(p.id)+'\')">'+T('plan.edit_btn')+'</button>');
+          actions.push('<button class="ok" onclick="runPlan(\''+esc(p.id)+'\')">'+T('plan.run')+'</button>');
+        }
+        actions.push('<button class="danger" onclick="delPlan(\''+esc(p.id)+'\')" '+(p.running?'disabled':'')+'>'+T('plan.delete')+'</button>');
+        tr.innerHTML = '<td>'+esc(p.name)+'</td><td><small>'+esc(p.source_label)+' → '+esc(p.dest_label)+
+          (p.smb_performance ? '<br><span style="color:var(--accent);font-size:0.78rem">'+esc(T('plan.mode_perf'))+'</span>' : '')+
+          '</small></td><td>'+esc(p.schedule_label||p.run_at)+'</td><td>'+st+'</td><td>'+actions.join(' ')+'</td>';
         tb.appendChild(tr);
       }
     }
-    async function runPlan(id){ await fetch('/api/plans/'+id+'/run',{method:'POST'}); loadPlans(); loadLog(); setInterval(loadPlans,3000); }
-    async function delPlan(id){ await fetch('/api/plans/'+id,{method:'DELETE'}); loadPlans(); }
+
+    function renderActiveJobs(jobs){
+      const box = document.getElementById('active-jobs');
+      if(!jobs || !jobs.length){
+        box.className = 'jobs-empty';
+        box.textContent = T('jobs.none');
+        return;
+      }
+      box.className = '';
+      box.innerHTML = '';
+      for(const j of jobs){
+        const item = document.createElement('div');
+        item.className = 'job-item';
+        const pct = j.status === 'running' && !j.percent ? -1 : (j.percent || 0);
+        let fillClass = 'progress-fill';
+        if(j.status === 'ok') fillClass += ' ok';
+        else if(j.status === 'error') fillClass += ' error';
+        else if(j.status === 'cancelled') fillClass += ' cancelled';
+        else if(pct < 0) fillClass += ' indeterminate';
+        const width = pct < 0 ? '' : ` style="width:${Math.min(100, pct)}%"`;
+        const statusLabel = j.status === 'ok' ? T('jobs.done')
+          : (j.status === 'error' ? T('jobs.failed')
+          : (j.status === 'cancelled' ? T('jobs.cancelled') : T('jobs.running')));
+        const metaParts = [statusLabel];
+        if (j.route_note) metaParts.push(j.route_note);
+        if (j.detail && j.detail !== j.route_note) metaParts.push(j.detail);
+        if (j.speed) metaParts.push(j.speed);
+        if (j.eta) metaParts.push('ETA ' + j.eta);
+        const meta = metaParts.join(' · ');
+        item.innerHTML =
+          '<div class="job-name">'+esc(j.name)+'</div>'+
+          '<div class="job-route">'+esc(j.source_label)+' → '+esc(j.dest_label)+'</div>'+
+          '<div class="progress-track"><div class="'+fillClass+'"'+width+'></div></div>'+
+          '<div class="job-meta">'+esc(meta)+'</div>';
+        if(j.status === 'running'){
+          const stopBtn = document.createElement('button');
+          stopBtn.type = 'button';
+          stopBtn.className = 'danger job-stop';
+          stopBtn.textContent = T('jobs.stop');
+          stopBtn.onclick = function(){ stopPlan(j.plan_id); };
+          item.appendChild(stopBtn);
+        }
+        box.appendChild(item);
+      }
+    }
+
+    async function loadActiveJobs(){
+      try {
+        const r = await fetch('/api/jobs/active');
+        const j = await r.json();
+        if(j.ok) renderActiveJobs(j.jobs || []);
+      } catch(e) { /* ignore */ }
+    }
+
+    async function stopPlan(id){
+      const j = await (await fetch('/api/plans/'+id+'/stop',{method:'POST'})).json();
+      if(!j.ok){ alert(j.error || T('err.generic')); return; }
+      loadActiveJobs();
+      loadPlans();
+      loadLog();
+    }
+
+    async function runPlan(id){
+      await fetch('/api/plans/'+id+'/run',{method:'POST'});
+      loadPlans();
+      loadActiveJobs();
+      loadLog();
+    }
+    async function delPlan(id){
+      const j = await (await fetch('/api/plans/'+id,{method:'DELETE'})).json();
+      if(!j.ok){ alert(j.error || T('err.generic')); return; }
+      loadPlans();
+    }
     async function loadLog(){ const j=await (await fetch('/api/log')).json(); document.getElementById('log').textContent=j.text||''; }
     async function saveNotify(){
       await fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
@@ -615,7 +862,7 @@
     }
     async function testNotify(){ await fetch('/api/notifications/test',{method:'POST'}); loadLog(); }
 
-    (async()=>{ try { localStorage.setItem(LANG_COOKIE, LANG); } catch(e){} updateScheduleUi(); await loadConfig(); await loadDevices(); loadPlans(); loadLog(); setInterval(loadPlans,15000); setInterval(async()=>{
+    (async()=>{ try { localStorage.setItem(LANG_COOKIE, LANG); } catch(e){} updateScheduleUi(); await loadConfig(); await loadDevices(); loadPlans(); loadActiveJobs(); loadLog(); setInterval(loadPlans,5000); setInterval(loadActiveJobs,1500); setInterval(async()=>{
       if(devices.some(d=>d.type==='smb' && (d.folder_cache||{}).building)) await loadDevices();
     }, 3000); })();
   </script>

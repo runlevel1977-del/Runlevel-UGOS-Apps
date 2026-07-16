@@ -3,56 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.request
 from typing import Any
 
-# All six Runlevel Docker apps — ports match project.yaml / compose.
-RUNLEVEL_APPS: list[dict[str, Any]] = [
-    {
-        "id": "com.runlevel.statshub",
-        "name": "Stats Hub",
-        "port": 29125,
-        "summary_path": "/api/snapshot",
-        "kind": "snapshot",
-        "self": True,
-    },
-    {
-        "id": "com.runlevel.backupverifier",
-        "name": "Backup Verifier",
-        "port": 29110,
-        "summary_path": "/api/jobs",
-        "kind": "jobs",
-    },
-    {
-        "id": "com.runlevel.transferhub",
-        "name": "Transfer Hub",
-        "port": 29100,
-        "summary_path": "/api/profiles",
-        "kind": "profiles",
-    },
-    {
-        "id": "com.runlevel.securityhub",
-        "name": "Security Hub",
-        "port": 29130,
-        "summary_path": "/api/events",
-        "kind": "security",
-    },
-    {
-        "id": "com.runlevel.wakesync",
-        "name": "Wake & Sync",
-        "port": 29120,
-        "summary_path": "/api/plans",
-        "kind": "plans",
-    },
-    {
-        "id": "com.runlevel.lockandkey",
-        "name": "Lock & Key",
-        "port": 29135,
-        "summary_path": "/api/vaults",
-        "kind": "vaults",
-    },
-]
+from runlevel_discover import list_runlevel_app_specs
 
 
 def _http_json(port: int, path: str, timeout: float = 2.5) -> tuple[bool, Any]:
@@ -170,6 +126,34 @@ def _summarize_security(data: Any) -> tuple[str, str, str]:
     return summary, "", "ok"
 
 
+def _summarize_icloud_sync(data: Any) -> tuple[str, str, str]:
+    if not isinstance(data, dict):
+        return "—", "", "ok"
+    auth = data.get("auth") if isinstance(data.get("auth"), dict) else {}
+    running = bool(data.get("running"))
+    bits: list[str] = []
+    if auth.get("drive_ok"):
+        bits.append("Drive ok")
+    elif auth.get("drive_ok") is False:
+        bits.append("Drive —")
+    if auth.get("photos_ok"):
+        bits.append("Photos ok")
+    elif auth.get("photos_ok") is False:
+        bits.append("Photos —")
+    if running:
+        bits.append("sync running")
+    elif data.get("last_sync_ok") is True:
+        bits.append("last sync ok")
+    elif data.get("last_sync_ok") is False:
+        detail = str(data.get("last_drive_msg") or data.get("last_photos_msg") or "")[:80]
+        return (" · ".join(bits) if bits else "sync failed"), detail, "bad"
+    status = "warn" if running else "ok"
+    if auth.get("drive_ok") is False or auth.get("photos_ok") is False:
+        status = "warn"
+    detail = str(data.get("last_drive_msg") or data.get("last_photos_msg") or "")[:80]
+    return (" · ".join(bits) if bits else "—"), detail, status
+
+
 def _summarize_list(kind: str, data: Any) -> tuple[str, str, str]:
     """Return (summary, detail, status)."""
     if kind == "snapshot":
@@ -178,6 +162,8 @@ def _summarize_list(kind: str, data: Any) -> tuple[str, str, str]:
         return _summarize_vaults(data)
     if kind == "security":
         return _summarize_security(data)
+    if kind == "icloud_sync":
+        return _summarize_icloud_sync(data)
 
     items = data
     if isinstance(data, dict):
@@ -228,36 +214,54 @@ def _summarize_list(kind: str, data: Any) -> tuple[str, str, str]:
 
 def collect_runlevel_apps() -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for spec in RUNLEVEL_APPS:
+    for spec in list_runlevel_app_specs():
         port = int(spec["port"])
-        ok_h, health = _http_json(port, "/health")
+        is_self = bool(spec.get("self"))
         row: dict[str, Any] = {
             "id": spec["id"],
             "name": spec["name"],
             "port": port,
-            "online": ok_h,
+            "online": False,
             "version": "",
             "summary": "",
             "detail": "",
             "status": "offline",
-            "is_self": bool(spec.get("self")),
+            "is_self": is_self,
         }
+        ok_h = False
+        health: Any = None
+        ok_s = False
+        payload: Any = None
+        if is_self:
+            try:
+                from monitor import snapshot as _local_snapshot
+
+                snap = _local_snapshot()
+                ok_h = True
+                health = {"version": os.environ.get("STATS_HUB_VERSION", "")}
+                ok_s = True
+                payload = {"ok": True, "snapshot": snap}
+            except Exception:
+                ok_h = False
+        else:
+            ok_h, health = _http_json(port, "/health")
+            if ok_h:
+                ok_s, payload = _http_json(port, str(spec["summary_path"]))
         if ok_h and isinstance(health, dict):
             row["version"] = str(health.get("version") or "")
             row["status"] = "ok"
-        if ok_h:
-            ok_s, payload = _http_json(port, str(spec["summary_path"]))
-            if ok_s:
-                summary, detail, st = _summarize_list(str(spec["kind"]), payload)
-                row["summary"] = summary
-                row["detail"] = detail
-                if st == "bad":
-                    row["status"] = "bad"
-                elif st == "warn" and row["status"] == "ok":
-                    row["status"] = "warn"
-            elif not row["summary"]:
-                row["summary"] = "UI online"
-        else:
+        row["online"] = ok_h
+        if ok_h and ok_s:
+            summary, detail, st = _summarize_list(str(spec["kind"]), payload)
+            row["summary"] = summary
+            row["detail"] = detail
+            if st == "bad":
+                row["status"] = "bad"
+            elif st == "warn" and row["status"] == "ok":
+                row["status"] = "warn"
+        elif ok_h and not row["summary"]:
+            row["summary"] = "UI online"
+        elif not ok_h:
             row["summary"] = "not reachable"
         rows.append(row)
     return rows

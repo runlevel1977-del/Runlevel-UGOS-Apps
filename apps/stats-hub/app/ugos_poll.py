@@ -19,7 +19,12 @@ _client: UgosApiClient | None = None
 _client_key: tuple[Any, ...] = ()
 _last_error = ""
 _last_ok_at = 0.0
+_last_fail_at = 0.0
+_fail_backoff_sec = 5.0
+_last_error_logged = ""
+_ugos_ok_logged = False
 _MIN_INTERVAL_SEC = 2.5
+_MAX_FAIL_BACKOFF_SEC = 60.0
 _last_ugos_volumes: list[dict[str, Any]] = []
 _VOL_NAME = re.compile(r"^volume(\d+)$", re.I)
 
@@ -77,6 +82,37 @@ def _get_client(cfg: dict[str, Any]) -> UgosApiClient:
             )
             _client_key = fp
         return _client
+
+
+def reset_ugos_client() -> None:
+    """Call after UGOS API settings change — drop cached client and backoff."""
+    global _client, _client_key, _last_fail_at, _fail_backoff_sec, _last_error_logged
+    with _client_lock:
+        _client = None
+        _client_key = ()
+    _last_fail_at = 0.0
+    _fail_backoff_sec = 5.0
+    _last_error_logged = ""
+
+
+def test_ugos_connection(cfg: dict[str, Any]) -> tuple[bool, str]:
+    """Quick login-only test (any port/host the user configured)."""
+    try:
+        client = UgosApiClient(
+            host=str(cfg.get("host") or "127.0.0.1"),
+            port=int(cfg.get("port") or 9443),
+            username=str(cfg.get("username") or ""),
+            password=str(cfg.get("password") or ""),
+            use_https=bool(cfg.get("use_https", True)),
+            verify_ssl=bool(cfg.get("verify_ssl", False)),
+        )
+        if not client.login():
+            return False, "login failed"
+        return True, ""
+    except UgosApiError as ex:
+        return False, str(ex)[:200]
+    except Exception as ex:
+        return False, str(ex)[:200]
 
 
 def last_ugos_status() -> dict[str, Any]:
@@ -195,6 +231,89 @@ def merge_ifaces(
     return out
 
 
+def _norm_block_dev(name: str) -> str:
+    s = str(name or "").strip().lower()
+    if s.startswith("/dev/"):
+        s = s[5:]
+    return s
+
+
+def _ugos_disk_dev_keys(d: dict[str, Any]) -> set[str]:
+    keys: set[str] = set()
+    for bit in (d.get("dev"), d.get("name"), d.get("label")):
+        k = _norm_block_dev(str(bit or ""))
+        if k and re.fullmatch(r"[a-z0-9]+", k):
+            keys.add(k)
+    return keys
+
+
+def _match_ugos_disk(
+    host: dict[str, Any],
+    ugos_disks: list[dict[str, Any]],
+    *,
+    used: set[int],
+) -> tuple[int, dict[str, Any]] | None:
+    host_name = _norm_block_dev(str(host.get("name") or ""))
+    host_serial = str(host.get("serial") or "").strip().lower()
+    host_model = str(host.get("model") or "").strip().lower()
+
+    def _candidates() -> list[tuple[int, dict[str, Any]]]:
+        return [(i, d) for i, d in enumerate(ugos_disks) if i not in used and isinstance(d, dict)]
+
+    if host_name:
+        for i, d in _candidates():
+            if host_name in _ugos_disk_dev_keys(d):
+                return i, d
+    if host_serial:
+        for i, d in _candidates():
+            if str(d.get("serial") or "").strip().lower() == host_serial:
+                return i, d
+    if host_model:
+        model_hits = [
+            (i, d)
+            for i, d in _candidates()
+            if str(d.get("model") or "").strip().lower() == host_model
+        ]
+        if len(model_hits) == 1:
+            return model_hits[0]
+    return None
+
+
+def merge_disk_temps(
+    host_rows: list[dict[str, Any]], ugos_disks: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Fill missing SMART temps from UGOS disk list (per disk, not only when host list is empty)."""
+    if not host_rows or not ugos_disks:
+        return host_rows
+    used: set[int] = set()
+    out: list[dict[str, Any]] = []
+    for row in host_rows:
+        cur = dict(row)
+        if cur.get("temp_c") is not None or cur.get("standby"):
+            out.append(cur)
+            continue
+        hit = _match_ugos_disk(cur, ugos_disks, used=used)
+        if not hit:
+            out.append(cur)
+            continue
+        idx, ug = hit
+        used.add(idx)
+        temp = ug.get("temp_c")
+        if temp is None:
+            out.append(cur)
+            continue
+        try:
+            temp_f = round(float(temp), 1)
+        except (TypeError, ValueError):
+            out.append(cur)
+            continue
+        cur["temp_c"] = temp_f
+        cur["health"] = "ok"
+        cur["ugos_temp"] = True
+        out.append(cur)
+    return out
+
+
 def ugos_disks_to_temps(disks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Supplement SMART temps from UGOS disk list when host smartctl is empty."""
     out: list[dict[str, Any]] = []
@@ -205,16 +324,17 @@ def ugos_disks_to_temps(disks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if temp is None:
             continue
         label = str(d.get("label") or "").strip()
-        name = str(d.get("name") or "?").strip()
+        name = str(d.get("dev") or d.get("name") or "?").strip()
         out.append(
             {
                 "name": name,
                 "label": label or name,
                 "temp_c": temp,
                 "health": "ok",
-                "device": "",
+                "device": f"/dev/{name}" if name and name != "?" else "",
                 "model": str(d.get("model") or ""),
                 "standby": False,
+                "ugos_temp": True,
             }
         )
     return out
@@ -222,7 +342,7 @@ def ugos_disks_to_temps(disks: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def fetch_ugos_metrics(*, force: bool = False) -> dict[str, Any] | None:
     """Return parsed dashboard metrics or None if disabled/unconfigured."""
-    global _last_error, _last_ok_at
+    global _last_error, _last_ok_at, _last_fail_at, _fail_backoff_sec, _last_error_logged, _ugos_ok_logged
     cfg = load_ugos_api_settings()
     if not cfg.get("enabled"):
         return None
@@ -232,28 +352,49 @@ def fetch_ugos_metrics(*, force: bool = False) -> dict[str, Any] | None:
     now = time.time()
     if not force and _last_ok_at and (now - _last_ok_at) < _MIN_INTERVAL_SEC:
         return {"ok": True, "cached": True}
+    if not force and _last_fail_at and (now - _last_fail_at) < _fail_backoff_sec:
+        return None
 
     try:
         client = _get_client(cfg)
         raw = client.fetch_snapshot()
         metrics = parse_dashboard_metrics(raw)
     except UgosApiError as ex:
-        _last_error = str(ex)[:200]
-        append_log(f"UGOS API: {ex}")
+        err = str(ex)[:200]
+        _last_error = err
+        _last_fail_at = now
+        _fail_backoff_sec = min(_MAX_FAIL_BACKOFF_SEC, max(5.0, _fail_backoff_sec * 1.5))
+        if err != _last_error_logged:
+            append_log(f"UGOS API: {ex}")
+            _last_error_logged = err
+        _ugos_ok_logged = False
         with _client_lock:
             global _client
             _client = None
         return None
     except Exception as ex:
-        _last_error = str(ex)[:200]
-        append_log(f"UGOS API error: {ex}")
+        err = str(ex)[:200]
+        _last_error = err
+        _last_fail_at = now
+        _fail_backoff_sec = min(_MAX_FAIL_BACKOFF_SEC, max(5.0, _fail_backoff_sec * 1.5))
+        if err != _last_error_logged:
+            append_log(f"UGOS API error: {ex}")
+            _last_error_logged = err
+        _ugos_ok_logged = False
         return None
 
     if not metrics.get("ok"):
         _last_error = "no_metrics"
+        _last_fail_at = now
+        _ugos_ok_logged = False
         return None
 
     _last_error = ""
+    _last_fail_at = 0.0
+    _fail_backoff_sec = 5.0
+    _last_error_logged = ""
     _last_ok_at = now
-    append_log("UGOS API snapshot OK")
+    if not _ugos_ok_logged:
+        append_log("UGOS API snapshot OK")
+        _ugos_ok_logged = True
     return metrics

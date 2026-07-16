@@ -853,6 +853,16 @@ def _collect_one_disk_temp(
             if t2 is not None:
                 temp = t2
                 skipped_standby = False
+        if (
+            use_skip
+            and temp is None
+            and not skipped_standby
+        ):
+            t2, si2, sm2, _skip2 = _try_smartctl_disk_temp(sc, name, use_skip=False)
+            serial = serial or si2
+            model = model or sm2
+            if t2 is not None:
+                temp = t2
     if temp is None and not skipped_standby:
         temp = _read_hwmon_block_temp(name)
 

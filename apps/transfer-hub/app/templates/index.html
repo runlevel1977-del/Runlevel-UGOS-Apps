@@ -120,6 +120,8 @@
     <p><label><input type="checkbox" id="auto_sync" onchange="syncMoveAutoCheckboxes('new')" /> {{ t('profile.auto') }}</label></p>
     <p><label><input type="checkbox" id="delete_source_after" onchange="syncMoveAutoCheckboxes('new')" /> {{ t('profile.move_source') }}</label></p>
     <p class="hint warn-box">{{ t('profile.move_hint') }}</p>
+    <p><label><input type="checkbox" id="smb_performance" /> {{ t('profile.smb_performance') }}</label></p>
+    <p class="hint">{{ t('profile.smb_performance_hint') }}</p>
     <div id="schedule-new">
       <label>{{ t('profile.schedule_type') }}</label><br>
       <select id="schedule_type" onchange="updateScheduleUi('new')" style="min-width:300px">
@@ -203,6 +205,8 @@
       <p><label><input type="checkbox" id="edit-auto_sync" onchange="syncMoveAutoCheckboxes('edit')" /> {{ t('profile.auto') }}</label></p>
       <p><label><input type="checkbox" id="edit-delete_source_after" onchange="syncMoveAutoCheckboxes('edit')" /> {{ t('profile.move_source') }}</label></p>
       <p class="hint warn-box">{{ t('profile.move_hint') }}</p>
+      <p><label><input type="checkbox" id="edit-smb_performance" /> {{ t('profile.smb_performance') }}</label></p>
+      <p class="hint">{{ t('profile.smb_performance_hint') }}</p>
       <div id="schedule-edit">
         <label>{{ t('profile.schedule_type') }}</label><br>
         <select id="edit-schedule_type" onchange="updateScheduleUi('edit')" style="min-width:300px">
@@ -632,9 +636,11 @@
     }
 
     function profileModeLabel(p) {
-      if (p.delete_source_after) return T('profiles.mode_move');
-      if (p.auto_sync) return p.schedule_label || (p.interval_minutes + ' min');
-      return '—';
+      const parts = [];
+      if (p.delete_source_after) parts.push(T('profiles.mode_move'));
+      else if (p.auto_sync) parts.push(p.schedule_label || (p.interval_minutes + ' min'));
+      if (p.smb_performance) parts.push(T('profiles.mode_perf'));
+      return parts.length ? parts.join(' + ') : '—';
     }
 
     async function createProfile() {
@@ -645,6 +651,7 @@
         dest: dstSel,
         auto_sync: document.getElementById('auto_sync').checked,
         delete_source_after: document.getElementById('delete_source_after').checked,
+        smb_performance: document.getElementById('smb_performance').checked,
         ...scheduleFieldsFromForm(''),
       };
       const r = await apiFetch('/api/profiles', {
@@ -691,6 +698,7 @@
       document.getElementById('edit-pname').value = p.name || '';
       document.getElementById('edit-auto_sync').checked = !!p.auto_sync;
       document.getElementById('edit-delete_source_after').checked = !!p.delete_source_after;
+      document.getElementById('edit-smb_performance').checked = !!p.smb_performance;
       document.getElementById('edit-schedule_type').value = normalizeScheduleType(p.schedule_type || 'window');
       setIntervalSelect(document.getElementById('edit-interval'), p.interval_minutes || 30);
       document.getElementById('edit-window_start').value = p.window_start || p.run_at || '15:30';
@@ -723,6 +731,7 @@
         dest: editDstSel,
         auto_sync: document.getElementById('edit-auto_sync').checked,
         delete_source_after: document.getElementById('edit-delete_source_after').checked,
+        smb_performance: document.getElementById('edit-smb_performance').checked,
         ...scheduleFieldsFromForm('edit-'),
       };
       const r = await apiFetch('/api/profiles/' + editProfileId, {

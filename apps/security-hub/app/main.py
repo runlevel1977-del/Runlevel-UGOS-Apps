@@ -14,11 +14,11 @@ from flask import Flask, g, jsonify, make_response, render_template, request
 
 from i18n import LANG_COOKIE, bundle, get_lang, lang_from_request, normalize_lang, t
 from icon_sync import sync_appcenter_icon
-from monitor import get_monitor
+from monitor import get_monitor, touch_client_activity
 from store import DATA_DIR, append_log, read_log_tail
 
 app = Flask(__name__)
-APP_VERSION = os.environ.get("SECURITY_HUB_VERSION", "0.1.11")
+APP_VERSION = os.environ.get("SECURITY_HUB_VERSION", "0.1.12")
 NAS_ADMIN_URL = os.environ.get(
     "NAS_ADMIN_URL",
     "https://github.com/runlevel1977-del/UgreenNASAdmin/releases/latest",
@@ -58,6 +58,7 @@ def health():
 
 @app.route("/")
 def index():
+    touch_client_activity()
     resp = make_response(render_template("index.html", version=APP_VERSION))
     picked = normalize_lang(request.args.get("lang"))
     if picked:
@@ -93,6 +94,7 @@ def api_config():
 
 @app.route("/api/events")
 def api_events():
+    touch_client_activity()
     return jsonify({"ok": True, **get_monitor().snapshot()})
 
 

@@ -22,6 +22,7 @@ on the NAS.
 
 ## Documentation
 
+- [User guide](../../docs/help/securityhub.md)
 - [Help index](../../docs/help/README.md)
 - [Privacy policy](../../docs/privacy/securityhub.md)
 - [Third-party licenses](../../THIRD_PARTY_LICENSES.md)

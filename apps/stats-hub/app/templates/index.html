@@ -106,6 +106,7 @@
   <div class="card">
     <h2>{{ t('ugos.title') }}</h2>
     <p class="hint">{{ t('ugos.hint') }}</p>
+    <p class="hint">{{ t('ugos.https_hint') }}</p>
     <div class="disk-settings">
       <label><input type="checkbox" id="ugos-enabled" /> {{ t('ugos.enabled') }}</label>
       <label>{{ t('ugos.host') }} <input type="text" id="ugos-host" size="14" style="background:#0a0e12;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.2rem .35rem" /></label>
@@ -114,6 +115,7 @@
       <label>{{ t('ugos.password') }} <input type="password" id="ugos-password" size="12" placeholder="{{ t('ugos.password_placeholder') }}" autocomplete="current-password" style="background:#0a0e12;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.2rem .35rem" /></label>
       <label><input type="checkbox" id="ugos-https" /> {{ t('ugos.https') }}</label>
       <label><input type="checkbox" id="ugos-verify" /> {{ t('ugos.verify_ssl') }}</label>
+      <button type="button" class="secondary" onclick="testUgosSettings()">{{ t('ugos.test') }}</button>
       <button type="button" onclick="saveUgosSettings()">{{ t('ugos.save') }}</button>
       <span id="ugos-settings-status"></span>
     </div>
@@ -256,20 +258,7 @@
       if (el && el.tagName === 'INPUT' && el.type !== 'checkbox') el.addEventListener('input', () => { ugosSettingsTouched = true; });
     });
 
-    function applyUgosSettings(ds) {
-      if (!ds || !ds.ugos_api || ugosSettingsTouched) return;
-      const u = ds.ugos_api;
-      document.getElementById('ugos-enabled').checked = !!u.enabled;
-      document.getElementById('ugos-host').value = u.host || '127.0.0.1';
-      document.getElementById('ugos-port').value = u.port || 9443;
-      document.getElementById('ugos-user').value = u.username || '';
-      document.getElementById('ugos-https').checked = u.use_https !== false;
-      document.getElementById('ugos-verify').checked = !!u.verify_ssl;
-    }
-
-    async function saveUgosSettings() {
-      const status = document.getElementById('ugos-settings-status');
-      status.textContent = '';
+    function ugosSettingsBody() {
       const body = {
         ugos_api: {
           enabled: document.getElementById('ugos-enabled').checked,
@@ -282,6 +271,42 @@
       };
       const pw = document.getElementById('ugos-password').value;
       if (pw) body.ugos_api.password = pw;
+      return body;
+    }
+
+    function applyUgosSettings(ds) {
+      if (!ds || !ds.ugos_api || ugosSettingsTouched) return;
+      const u = ds.ugos_api;
+      document.getElementById('ugos-enabled').checked = !!u.enabled;
+      document.getElementById('ugos-host').value = u.host || '127.0.0.1';
+      document.getElementById('ugos-port').value = u.port || 9443;
+      document.getElementById('ugos-user').value = u.username || '';
+      document.getElementById('ugos-https').checked = u.use_https !== false;
+      document.getElementById('ugos-verify').checked = !!u.verify_ssl;
+    }
+
+    async function testUgosSettings() {
+      const status = document.getElementById('ugos-settings-status');
+      status.textContent = '…';
+      try {
+        const r = await fetch('/api/ugos/test', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(ugosSettingsBody()),
+        });
+        const j = await r.json();
+        status.textContent = j.ok ? T('ugos.test_ok') : T('ugos.test_fail', {msg: j.error || '?'});
+      } catch (e) {
+        status.textContent = T('ugos.test_fail', {msg: 'network'});
+      }
+    }
+
+    async function saveUgosSettings() {
+      const status = document.getElementById('ugos-settings-status');
+      const btn = document.querySelector('button[onclick="saveUgosSettings()"]');
+      status.textContent = '';
+      if (btn) btn.disabled = true;
+      const body = ugosSettingsBody();
       try {
         const r = await fetch('/api/settings', {
           method: 'POST',
@@ -294,9 +319,14 @@
           document.getElementById('ugos-password').value = '';
           applyUgosSettings(j.settings);
           status.textContent = T('ugos.saved');
-          poll();
+        } else {
+          status.textContent = j.error || 'Error';
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        status.textContent = 'Error';
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     }
 
     function applyDiskSettings(ds) {
@@ -309,7 +339,9 @@
 
     async function saveDiskSettings() {
       const status = document.getElementById('disk-settings-status');
+      const btn = document.querySelector('button[onclick="saveDiskSettings()"]');
       status.textContent = '';
+      if (btn) btn.disabled = true;
       const body = {
         disk_poll_interval_sec: parseInt(document.getElementById('disk-poll-interval').value, 10),
         disk_skip_standby: document.getElementById('disk-skip-standby').checked,
@@ -325,9 +357,14 @@
           diskSettingsTouched = false;
           applyDiskSettings(j.settings);
           status.textContent = T('storage.saved');
-          poll();
+        } else {
+          status.textContent = j.error || 'Error';
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        status.textContent = 'Error';
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     }
 
     function renderSnap(s) {
@@ -500,12 +537,21 @@
         os.hostname, os.PRETTY_NAME || os.OS_VERSION, os.uptime ? ('↑ ' + os.uptime) : ''
       ].filter(Boolean).map(esc).join(' · ');
     }
+    let pollInFlight = false;
     async function poll() {
+      if (pollInFlight) return;
+      pollInFlight = true;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
       try {
-        const r = await fetch('/api/snapshot');
+        const r = await fetch('/api/snapshot', { signal: ctrl.signal });
         const j = await r.json();
         renderSnap(j.snapshot);
       } catch (e) { /* ignore */ }
+      finally {
+        clearTimeout(timer);
+        pollInFlight = false;
+      }
     }
     async function scanTop() {
       await fetch('/api/top/scan', { method: 'POST' });

@@ -22,6 +22,7 @@ on the NAS.
 
 ## Documentation
 
+- [User guide](../../docs/help/lockandkey.md)
 - [Help index](../../docs/help/README.md)
 - [Privacy policy](../../docs/privacy/lockandkey.md)
 - [Third-party licenses](../../THIRD_PARTY_LICENSES.md)
