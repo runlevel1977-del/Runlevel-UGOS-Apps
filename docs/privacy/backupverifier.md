@@ -1,45 +1,42 @@
 > Public privacy policy for UGREEN App Center.
 > Repository: https://github.com/runlevel1977-del/Runlevel-UGOS-Apps
 
-# Backup Verifier — Privacy & Security Summary
+# Backup Verifier — Privacy Policy
 
 **App ID:** `com.runlevel.backupverifier`  
-**Publisher:** Runlevel  
-**Version:** 0.3.4  
+**Publisher / controller:** Runlevel (Ivica Kampic)  
+**Contact:** runlevel1977@posteo.de  
+**Effective date:** 25 August 2026  
+**Last updated:** 25 August 2026
 
-## Data stored locally (on the NAS)
+Local NAS app. Compare is read-only. Runlevel does not receive your files.
 
-Under the user-chosen **Data directory** (`DATA_PATH`, mounted as `/data` in the container):
+## 1. Roles and legal basis
 
-| File | Content |
-|------|---------|
-| `jobs.json` | Verification jobs (endpoints, schedule, options) |
-| `devices.json` | Saved SMB devices including **username and password** |
-| `notify.json` | Optional Telegram/SMTP settings (if saved via UI) |
-| `verifier.log` | Application log (job start/end, mismatch details) |
+Optional SMB credentials only after **I agree**. **Decline** is equally available. No sale/sharing. No cross-border transfer by Runlevel.
 
-No other persistent user data is collected by Backup Verifier.
+## 2. Personal information
 
-## Network behavior
+| Function | Data | Purpose | Method | Retention |
+|---|---|---|---|---|
+| Install | Data directory, optional folder shortcut | Run verifier | UGOS parameters | Until uninstall |
+| SMB devices | Host, username, password | Compare over SMB | Local store after consent; **passwords are never returned to the frontend** | Until device deleted |
+| Jobs / schedules | Paths, options | Verification | Local JSON | Until deleted |
+| Notifications | Telegram/SMTP/email if enabled | Alerts | Local after consent | Until cleared |
+| Consent | Agree/decline | Record choice | `privacy_consent.json` | Until deleted |
 
-- **Read-only** access to local paths and SMB shares — no writes to compared folders.
-- LAN scan (`LAN_SUBNET`) probes hosts on the local network only.
-- Optional Telegram API or user-configured SMTP for alerts — only when enabled.
-- Backup Verifier does **not** send data to external analytics or cloud services operated by Runlevel.
-- Optional link in the UI points to **Ugreen NAS Admin** on GitHub (user-initiated in browser).
+## 3. Minors
 
-## Access control
+NAS administrators only.
 
-- App is **admin-only** (`only_admin: true` in `project.yaml`).
-- All volume mounts in `docker-compose.yaml` are **read-only** (`:ro`).
-- SMB credentials stored in plain JSON — use dedicated data folder with restricted permissions.
+## 4. Rights
 
-## Recommendations for users
+Data directory / uninstall / email runlevel1977@posteo.de.
 
-- Run verification against copies or backup shares where possible.
-- Use separate SMB accounts with read-only share permissions where supported.
-- Do not expose port 29110 to the internet without additional protection.
+## 5. Security
+
+Standalone authentication (`open_type: tab`): app password required; unauthenticated access blocked. Admin-only. Do not expose the app port to the public Internet. Browse paths are confined to configured mounts. Bridge networking; no host network.
 
 ## Contact
 
-Developer contact for privacy inquiries: runlevel1977@posteo.de (Ivica Kampic, Runlevel)
+runlevel1977@posteo.de (Ivica Kampic, Runlevel)

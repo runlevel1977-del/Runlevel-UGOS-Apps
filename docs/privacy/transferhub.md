@@ -1,46 +1,42 @@
 > Public privacy policy for UGREEN App Center.
 > Repository: https://github.com/runlevel1977-del/Runlevel-UGOS-Apps
 
-# Transfer Hub — Privacy & Security Summary
+# Transfer Hub — Privacy Policy
 
 **App ID:** `com.runlevel.transferhub`  
-**Publisher:** Runlevel  
-**Version:** 0.6.10  
+**Publisher / controller:** Runlevel (Ivica Kampic)  
+**Contact:** runlevel1977@posteo.de  
+**Effective date:** 25 August 2026  
+**Last updated:** 25 August 2026
 
-## Data stored locally (on the NAS)
+Local NAS app. Runlevel does not receive your files or credentials.
 
-Under the user-chosen **Data directory** (`DATA_PATH`, mounted as `/data` in the container):
+## 1. Roles and legal basis
 
-| File | Content |
-|------|---------|
-| `profiles.json` | Transfer profiles (source/destination paths, schedule, options) |
-| `devices.json` | Saved devices including **SMB username and password** |
-| `hub.log` | Application log (transfer start/end, errors) |
+Administrator-controlled install. Optional SMB credentials stored only after **I agree**. **Decline** is equally available. No sale/sharing. No cross-border transfer by Runlevel.
 
-No other persistent user data is collected by Transfer Hub.
+## 2. Personal information
 
-## Network behavior
+| Function | Data | Purpose | Method | Retention |
+|---|---|---|---|---|
+| Install | Data directory, optional folder shortcut | Run copy/sync | UGOS parameters | Until uninstall |
+| SMB devices | Host, username, password | File transfer | Local store after consent; passwords are not returned to the UI | Until device deleted |
+| Profiles / schedules | Paths, options | Copy/sync jobs | Local JSON | Until deleted |
+| Consent | Agree/decline | Record choice | `privacy_consent.json` | Until deleted |
+| Logs | Job progress (no passwords) | Troubleshooting | App log | Until deleted |
 
-- Connections are **local/LAN only**: SMB to PCs or other NAS devices, local filesystem paths (Volume 1/2, UGOS folder, USB under `/mnt/@usb`).
-- Transfer Hub does **not** send data to external servers, analytics, or cloud services operated by Runlevel.
-- Optional link in the UI points to **Ugreen NAS Admin** on GitHub (Windows companion tool); opening that link is user-initiated in the browser.
+## 3. Minors
 
-## Access control
+NAS administrators only. Not for children.
 
-- App is **admin-only** (`only_admin: true` in `project.yaml`).
-- SMB credentials are stored in plain JSON on the NAS data path — users should use a dedicated data folder with restricted permissions and strong SMB passwords.
+## 4. Rights
 
-## Recommendations for users
+Edit/delete the data directory or uninstall. Email runlevel1977@posteo.de.
 
-- Choose a dedicated `DATA_PATH` (e.g. `/volume1/docker/transfer-hub/data`), not a public share.
-- Do not expose port 29100 to the internet without additional protection.
-- Use separate SMB accounts with minimal required permissions where possible.
+## 5. Security
 
-## Data retention
-
-- Data remains until the user deletes profiles/devices or removes the app data folder.
-- Uninstalling the Docker app typically leaves `DATA_PATH` intact on the NAS (user data preserved).
+Standalone authentication (`open_type: tab`): app password required; unauthenticated access blocked. Admin-only. Do not expose the app port to the public Internet. CSRF is mitigated by required authenticated app session on all state-changing APIs. Bridge networking; no host network.
 
 ## Contact
 
-Developer contact for privacy inquiries: runlevel1977@posteo.de (Ivica Kampic, Runlevel)
+runlevel1977@posteo.de (Ivica Kampic, Runlevel)

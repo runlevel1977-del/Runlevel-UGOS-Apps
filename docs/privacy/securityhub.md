@@ -1,49 +1,41 @@
 > Public privacy policy for UGREEN App Center.
 > Repository: https://github.com/runlevel1977-del/Runlevel-UGOS-Apps
 
-# Security Hub — Privacy & Security Summary
+# Security Hub — Privacy Policy
 
 **App ID:** `com.runlevel.securityhub`  
-**Publisher:** Runlevel  
-**Version:** 0.1.10  
+**Publisher / controller:** Runlevel (Ivica Kampic)  
+**Contact:** runlevel1977@posteo.de  
+**Effective date:** 25 August 2026  
+**Last updated:** 25 August 2026
 
-## Data stored locally (on the NAS)
+Local NAS app. Runlevel does not receive your logs.
 
-Under the user-chosen **Data directory** (`DATA_PATH`, mounted as `/data` in the container):
+## 1. Roles and legal basis
 
-| File | Content |
-|------|---------|
-| `settings.json` | UI preferences (language, display options) |
-| `security-hub.log` | Application log |
+Optional UGOS API credentials only after **I agree** in the app. **Decline** is equally available. No sale/sharing. No cross-border transfer by Runlevel. Credentials are **not** collected as required install fields.
 
-Parsed login events are read from host logs at query time; Security Hub does **not** copy full system logs into `DATA_PATH`.
+## 2. Personal information
 
-## Network behavior
+| Function | Data | Purpose | Method | Retention |
+|---|---|---|---|---|
+| Install | Data directory | Store settings/log | UGOS parameter | Until uninstall |
+| Log view | Usernames, IP addresses, login times already present in NAS logs | Security review | Read-only mount of host log paths | Displayed in UI; not copied off-device by Runlevel |
+| Optional UGOS API | Username/password if entered after consent | Extra status | Encrypted local settings | Until cleared |
+| Consent | Agree/decline | Record choice | `privacy_consent.json` | Until deleted |
 
-- **No outbound connections** to Runlevel or third-party analytics.
-- Web UI is served on port **29130** (admin access only).
-- Optional link in the UI points to **Ugreen NAS Admin** on GitHub (user-initiated).
+## 3. Minors
 
-## Host access (read-only)
+NAS administrators only.
 
-| Mount | Purpose |
-|-------|---------|
-| `/var/log` (read-only) | SSH/auth, system logs |
-| `/var/ugreen/log` (read-only) | UGOS services, SMB audit, app/web logins |
+## 4. Rights
 
-Security Hub does **not** modify logs, firewall rules, or `block_ip_list`.
+Data directory / uninstall / email runlevel1977@posteo.de.
 
-## Access control
+## 5. Security
 
-- App is **admin-only** (`only_admin: true`).
-- Displayed data may include **client IP addresses** and usernames from auth logs — visible only to NAS administrators.
-- Do not expose port 29130 to the internet without additional protection.
-
-## Data retention
-
-- Settings/log remain until the user deletes the data folder.
-- Uninstalling typically leaves `DATA_PATH` intact on the NAS.
+Standalone authentication (`open_type: tab`): app password required; unauthenticated access blocked. Admin-only. Do not expose the app port to the public Internet. Privileged mode is not used. Bridge networking; no host network.
 
 ## Contact
 
-Developer contact for privacy inquiries: runlevel1977@posteo.de (Ivica Kampic, Runlevel)
+runlevel1977@posteo.de (Ivica Kampic, Runlevel)

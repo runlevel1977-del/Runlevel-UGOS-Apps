@@ -1,62 +1,42 @@
 > Public privacy policy for UGREEN App Center.
 > Repository: https://github.com/runlevel1977-del/Runlevel-UGOS-Apps
 
-# Lock & Key — Privacy & Security Summary
+# Lock & Key — Privacy Policy
 
 **App ID:** `com.runlevel.lockandkey`  
-**Publisher:** Runlevel  
-**Version:** 0.1.21  
+**Publisher / controller:** Runlevel (Ivica Kampic)  
+**Contact:** runlevel1977@posteo.de  
+**Effective date:** 25 August 2026  
+**Last updated:** 25 August 2026
 
-## Data stored locally (on the NAS)
+Local NAS app for vault/key management. Runlevel does not receive your keys.
 
-Under the user-chosen **Data directory** (`DATA_PATH`, mounted as `/data` in the container):
+## 1. Roles and legal basis
 
-| File | Content |
-|------|---------|
-| `vaults.json` | Vault registry (folder paths, seal status, USB binding hashes, file counts) |
-| `jobs.json` | Background job state (seal/unlock progress) |
-| `lockkey.log` | Application log |
-| `meta.json` | Deleted-vault blocklist and app metadata |
+Optional credentials only after **I agree**. **Decline** is equally available. No sale/sharing. No cross-border transfer by Runlevel.
 
-**Encryption keys are not stored on the NAS.** After sealing, the user downloads the key file (`lockkey_<id>.lk`) or writes it to a USB stick. Without the key file (and optional password), encrypted data cannot be recovered.
+## 2. Personal information
 
-## User data on shared volumes
+| Function | Data | Purpose | Method | Retention |
+|---|---|---|---|---|
+| Install | Data directory; user-selected folder shortcut | Run the app | UGOS parameters | Until uninstall |
+| Vault registry | Vault names, paths, status | Manage vaults | Local JSON | Until deleted |
+| Key material | Passphrases / key files you create | Encrypt/decrypt | Stored locally; download APIs require admin gateway auth | Until you delete them |
+| Optional UGOS API | Username/password if entered after consent | Volume listing | Encrypted local settings | Until cleared |
+| Consent | Agree/decline | Record choice | `privacy_consent.json` | Until deleted |
 
-The app encrypts files in user-selected folders on **Volume 1** and **Volume 2** (and optional UGOS folder shortcut):
+## 3. Minors
 
-- Encrypted files use suffix `.lkenc`
-- Marker `.lockkey-sealed` and manifest `.lockkey-manifest` in the vault folder
-- Original plaintext files are removed after a successful seal
+NAS administrators only.
 
-## Network behavior
+## 4. Rights
 
-- **No outbound connections** to Runlevel or third-party analytics.
-- Web UI is served on port **29135** (admin access only via UGOS).
-- Optional link in the UI points to **Ugreen NAS Admin** on GitHub (user-initiated).
+Data directory / uninstall / email runlevel1977@posteo.de.
 
-## Host access
+## 5. Security
 
-| Mount | Access | Purpose |
-|-------|--------|---------|
-| `/volume1`, `/volume2` | read/write | User folders to seal/unlock |
-| `${NAS_DATA_ROOT}` → `/mnt/ugos` | read/write | Folder picker shortcut |
-| `/mnt/@usb` | read/write | USB key file read/write; stick may be formatted before key write |
-| `/dev`, `/sys` | read-only | USB device identification |
-| `/var/packages/com.runlevel.lockandkey` | read-only | Package metadata |
-
-The app can **format or wipe USB sticks** when writing a key file (FAT32, single key per stick). This affects only removable USB media selected by the administrator.
-
-## Access control
-
-- App is **admin-only** (`only_admin: true`).
-- Flask UI has no separate login — protection relies on UGOS admin session and network access to port 29135.
-- Do not expose port 29135 to the internet without additional protection.
-
-## Data retention
-
-- Registry and logs remain under `DATA_PATH` until the user deletes that folder.
-- Uninstalling the app typically leaves `DATA_PATH` and encrypted `.lkenc` files on the NAS intact.
+Standalone authentication (`open_type: tab`): app password required on all APIs including key download; unauthenticated access blocked. Admin-only. Do not expose the app port to the public Internet. `/dev` is not mounted. Only the user-selected folder shortcut plus data directory are mounted. Bridge networking; no host network.
 
 ## Contact
 
-Developer contact for privacy inquiries: runlevel1977@posteo.de (Ivica Kampic, Runlevel)
+runlevel1977@posteo.de (Ivica Kampic, Runlevel)

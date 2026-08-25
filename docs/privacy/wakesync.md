@@ -1,44 +1,43 @@
 > Public privacy policy for UGREEN App Center.
 > Repository: https://github.com/runlevel1977-del/Runlevel-UGOS-Apps
 
-# Wake & Sync — Privacy & Security Summary
+# Wake & Sync — Privacy Policy
 
 **App ID:** `com.runlevel.wakesync`  
-**Publisher:** Runlevel  
-**Version:** 0.1.16  
+**Publisher / controller:** Runlevel (Ivica Kampic)  
+**Contact:** runlevel1977@posteo.de  
+**Effective date:** 25 August 2026  
+**Last updated:** 25 August 2026
 
-## Data stored locally (on the NAS)
+The app runs locally on your UGREEN NAS. Runlevel does not operate a cloud backend for this app.
 
-Under the user-chosen **Data directory** (`DATA_PATH`, mounted as `/data` in the container):
+## 1. Roles and legal basis
 
-| File | Content |
-|------|---------|
-| `plans.json` | Sync plans (schedule, source/target paths, WoL MAC/IP, wait timeout) |
-| `devices.json` | Saved SMB devices including **username and password** |
-| `notify.json` | Optional Telegram/SMTP settings (if saved via UI) |
-| `wake-sync.log` | Application log (WoL, sync start/end, errors) |
+You (the NAS administrator) control installation and optional credentials. Legal basis (EU): providing the app you requested; optional credentials only after **I agree**. **Decline** is offered with equal ease. We do **not sell or share** personal data. Runlevel performs **no cross-border transfer**. Data stays on your NAS except optional Telegram/SMTP that you configure (those go to the providers you chose).
 
-No other persistent user data is collected by Wake & Sync.
+## 2. Personal information (purpose, method, scope)
 
-## Network behavior
+| Function | Data | Purpose | Method | Retention |
+|---|---|---|---|---|
+| Install | Data directory; optional UGOS folder path; optional WoL broadcast/source IP | Run the app | UGOS install parameters | Until uninstall / folder delete |
+| Peer NAS / SMB | Display name, IP, MAC, SMB username/password | Wake-on-LAN and sync | Stored locally after consent; passwords must not be shown again in the UI | Until you delete the device |
+| Schedules | Source/target paths, timetable | Run planned sync | Local JSON | Until you delete the plan |
+| Notifications | Telegram token/chat, SMTP host/user/password, email from/to | Alerts | Local settings after consent; optional install fields if you fill them | Until you clear settings |
+| Consent | Agree/decline + timestamp | Record choice | `privacy_consent.json` | Until deleted |
+| Logs | Job status (passwords redacted) | Troubleshooting | App log | Until deleted |
 
-- **Wake-on-LAN:** UDP magic packet to configured broadcast/subnet (local LAN or direct link).
-- **SMB / sync:** Connections to target NAS/PC on the local network only (`rclone` over SMB).
-- **Notifications:** Optional Telegram API or user-configured SMTP — only when the user enables alerts.
-- Wake & Sync does **not** send data to external analytics or cloud services operated by Runlevel.
-- Optional link in the UI points to **Ugreen NAS Admin** on GitHub (user-initiated in browser).
+## 3. Minors
 
-## Access control
+For NAS administrators only. Not directed at children. We do not knowingly collect children's data.
 
-- App is **admin-only** (`only_admin: true` in `project.yaml`).
-- SMB credentials stored in plain JSON on the NAS data path — use dedicated folder with restricted permissions.
+## 4. Rights
 
-## Recommendations for users
+Access/correct/delete by editing the data directory or uninstalling. Withdraw consent by declining in-app or deleting `privacy_consent.json`. Email runlevel1977@posteo.de.
 
-- Set `WOL_BROADCAST` and `WOL_SOURCE_IP` for direct-cable links if WoL from Docker bridge fails.
-- Use strong SMB passwords and minimal share permissions on the target NAS.
-- Do not expose port 29120 to the internet without additional protection.
+## 5. Security
+
+Standalone authentication (`open_type: tab`): app password required after first launch; unauthenticated access blocked. Admin-only. Do not expose the app port to the public Internet. MAC addresses are format-validated. Volumes: only the user-selected UGOS folder plus the data directory (not the entire `/home` tree). Bridge networking; no host network.
 
 ## Contact
 
-Developer contact for privacy inquiries: runlevel1977@posteo.de (Ivica Kampic, Runlevel)
+runlevel1977@posteo.de (Ivica Kampic, Runlevel)
