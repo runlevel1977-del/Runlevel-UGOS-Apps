@@ -13,25 +13,24 @@ On a schedule: Wake-on-LAN a second NAS/PC, wait until SMB is reachable, then ru
 
 1. Install **Docker** suite.
 2. Install **Wake & Sync**.
-3. Set **Data directory** (e.g. `/volume1/docker/wake-sync/data`).
-4. Optional Docker parameters:
-   - **WoL broadcast** — subnet broadcast (e.g. `192.168.2.255`), **not** the target NAS IP.
-   - **WoL source IP** — **this UGREEN NAS** IP on the link used to send the magic packet (not the QNAP/target IP).
-5. Optional: Telegram/SMTP for alerts.
-6. Accept privacy consent when storing SMB credentials.
+3. Set **UGOS folder shortcut** (source picker). App password, plans, and credentials are stored in the app package directory and are **removed on uninstall**.
+4. Optional: **WoL broadcast** / **WoL source IP** (not passwords).
+5. Open the app. First screen: **privacy consent** (Agree and Decline). Then set an app password.
+6. Telegram / SMTP: configure **inside the app** after Agree (not in App Center install fields).
 7. On the **target** device: enable Wake-on-LAN / magic packet.
 
 ## Core usage
 
-1. Open Wake & Sync.
-2. Add **target device** (IP, MAC, SMB credentials).
-3. Create a **plan**: sources (one or more folders) → destination base, schedule, wait timeout.
+1. Open Wake & Sync, confirm privacy, sign in.
+2. Add **target device** (IP, MAC, SMB credentials). The password is sent encrypted (`password_enc`), not as HTTP plaintext.
+3. Create a **plan**: sources → destination, schedule, wait timeout.
 4. Enable the plan or run once.
 5. Watch job progress; use **Stop** if needed.
-6. Confirm sync completed and alerts (if configured).
 
 ## Tips
 
 - Direct cable UGREEN↔target: set source IP to UGREEN’s link IP and broadcast to that subnet.
 - Same LAN via router: UGREEN LAN IP + `x.x.x.255` broadcast is usually enough.
 - Incremental sync copies only new/changed files.
+- Uninstalling the app clears app password and plans. After reinstall you set a new password and see the privacy dialog again.
+- Footer: Help, Privacy, Support.
