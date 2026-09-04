@@ -7,27 +7,27 @@
 
 ## What it does
 
-Copy or sync folders between local volumes, USB, and SMB devices on the LAN. Profiles, schedules, and live job progress.
+Copy or sync folders between the NAS folder you select at install, USB, and SMB devices on the LAN. Profiles, schedules, and live job progress.
 
 ## Install / configure
 
 1. Install **Docker** suite.
 2. Install **Transfer Hub**.
-3. Set **Data directory** (e.g. `/volume1/docker/transfer-hub/data`).
-4. Optional: **UGOS folder** shortcut, home network / extra hosts for LAN scan, UGOS API credentials.
-5. Accept privacy consent when storing SMB credentials (first use).
+3. Set **UGOS folder** to the directory you want to copy from/to (this is the **only** NAS folder mounted — not the whole volume or `/home`). App password and profiles are stored in the package directory and are **removed on uninstall**.
+4. Optional: LAN scan CIDR / extra hosts (not passwords).
+5. Open the app. First screen: **privacy consent** (Agree and Decline). Then set an app password.
 
 ## Core usage
 
-1. Open Transfer Hub.
-2. Add a **device** (local path or SMB host + credentials).
+1. Open Transfer Hub, confirm privacy, sign in.
+2. Add a **device** (SMB host + credentials). The password is sent encrypted (`password_enc`), not as HTTP plaintext.
 3. Create a **profile**: source → destination, options (copy/sync).
 4. Run once (**Start**) or enable a schedule.
-5. Watch job progress (bytes, speed, ETA) and stop if needed.
-6. Check the log under the data directory on failure.
+5. Watch job progress and stop if needed.
 
 ## Tips
 
-- Use a dedicated data folder (credentials are stored locally as JSON).
+- Pick a UGOS folder that actually contains the data you want to copy (e.g. your backup share).
 - Prefer dedicated SMB accounts with minimal share rights.
-- LAN only — no cloud upload by Runlevel.
+- Uninstalling the app clears the app password and profiles.
+- Footer: Help, Privacy, Support.
