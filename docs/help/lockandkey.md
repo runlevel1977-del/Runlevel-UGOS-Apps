@@ -13,21 +13,21 @@ Encrypt selected folders on Volume 1/2 into sealed vaults. The encryption key is
 
 1. Install **Docker** suite.
 2. Install **Lock & Key**.
-3. Set **Data directory** (e.g. `/volume1/docker/lock-and-key/data`).
-4. Optional: UGOS folder shortcut, UGOS API credentials.
-5. Open the app (admin only).
+3. Set **Data directory** and **UGOS folder shortcut**. App password is set in the app (not as an install field).
+4. Open the app. First screen: **privacy consent** (Agree and Decline). Then set an app password.
 
 ## Core usage — seal (encrypt)
 
-1. Open Lock & Key.
+1. Open Lock & Key, confirm privacy, sign in.
 2. Choose a folder on Volume 1 or 2.
-3. Start **Seal** / encrypt job.
-4. When finished: **download the key file** (`.lk`) and/or write it to USB.
-5. Store the key offline in a safe place. Do not lose it.
+3. Optional: password-protect the key file (sent as `key_passphrase_enc`, not HTTP plaintext).
+4. Start **Seal** / encrypt job.
+5. When finished: **download the key file** (`.lk`) and/or write it to USB.
+6. Store the key offline in a safe place. Do not lose it.
 
 ## Core usage — unlock
 
-1. Provide the key file (upload or USB).
+1. Provide the key file (upload or USB). Upload is RSA-encrypted on the HTTP path (`key_b64_enc`).
 2. Enter password if one was set.
 3. Run unlock; wait for job completion.
 4. Verify files are readable again.
@@ -37,3 +37,4 @@ Encrypt selected folders on Volume 1/2 into sealed vaults. The encryption key is
 - Losing the key file means permanent data loss for sealed content.
 - Test with a small non-critical folder first.
 - Do not expose port 29135 to the internet.
+- Footer: Help, Privacy, Support.
