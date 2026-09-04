@@ -13,17 +13,16 @@ Read-only security overview for administrators: login/auth activity from system 
 
 1. Install **Docker** suite.
 2. Install **Security Hub**.
-3. Set **Data directory** (e.g. `/volume1/docker/security-hub/data`).
-4. Optional: NAS IP + UGOS API user/password for related metrics.
-5. Open the app (admin only).
+3. Set **Data directory** (empty folder after a reinstall if you want the first-launch privacy dialog again).
+4. Open the app. First screen: **privacy consent** (Agree and Decline). Then set an app password.
+5. The app password is not sent as HTTP plaintext (`password_enc`).
 
 ## Core usage
 
-1. Open Security Hub.
+1. Open Security Hub, confirm privacy, sign in.
 2. Review recent login / auth events.
 3. Filter or refresh as needed.
-4. Check language / display options in settings.
-5. Use footer Help / Support if something looks wrong.
+4. Footer: Help, Privacy, Support.
 
 ## Tips
 
