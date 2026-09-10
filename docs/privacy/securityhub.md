@@ -8,7 +8,7 @@
 **E-mail:** runlevel1977@posteo.de  
 **Registered / office address:** Ivica Kampic, Runlevel, Leipziger Str. 33, 89537 Giengen, Deutschland  
 **Effective date:** 4 September 2026  
-**Last updated:** 4 September 2026
+**Last updated:** 10 September 2026
 
 This policy describes personal data processed by Security Hub when installed on a UGREEN NAS. The app runs locally on the device. Runlevel does not operate a cloud backend for this app and does not receive your NAS data.
 
@@ -25,7 +25,7 @@ This policy describes personal data processed by Security Hub when installed on 
 
   To exercise your rights, write to **runlevel1977@posteo.de** or to the postal address above.
 
-- **You (the NAS administrator)** decide whether to install the app, which optional credentials to store, and when to delete the data directory.
+- **You (the NAS administrator)** decide whether to install the app. Uninstalling Security Hub removes the package data directory (app password, consent record, app log).
 
 ## 2. Legal basis
 
@@ -38,22 +38,22 @@ This policy describes personal data processed by Security Hub when installed on 
 
 | Business function | Data | Purpose | Method | Scope / retention |
 |---|---|---|---|---|
-| Install | Data directory path you choose | Store local settings/log | Written by UGOS to the container mount | Until you delete the folder or uninstall |
+| Install | None (no user-chosen data folder) | Run the app | App data lives under the UGOS package directory | Until uninstall |
 | Log view | Usernames, IP addresses, login times already present in NAS logs | Security review | Read-only mount of host log paths | Displayed in the UI; not copied off-device by Runlevel |
-| Optional UGOS API | NAS username and password (only if you enter them in the app after consent) | Extra status | Stored encrypted locally; not required at install | Until you clear settings or delete the data directory |
-| Privacy consent | Agree/decline, timestamp, policy version | Record your choice | `privacy_consent.json` | Until you delete the data directory |
-| App login | App password (you choose) | Block unauthorized access | Salted hash; the password is **RSA-OAEP-encrypted in transit** (not sent as HTTP plaintext) | Until you delete the data directory |
-| Application log | App errors (no passwords) | Troubleshooting | App log file | Until you delete the file |
+| Optional UGOS API | NAS username and password (only if you enter them in the app after consent) | Extra status | Stored encrypted locally; not required at install | Until uninstall |
+| Privacy consent | Agree/decline, timestamp, policy version | Record your choice | `privacy_consent.json` in the package data dir | Until uninstall |
+| App login | App password (you choose) | Block unauthorized access | Salted hash; the password is **RSA-OAEP-encrypted in transit** (not sent as HTTP plaintext) | Until uninstall |
+| Application log | App errors (no passwords) | Troubleshooting | App log file | Until uninstall |
 
 Security Hub does **not** collect email addresses. Installation parameters do not include NAS username or password.
 
 ## 4. Children / minors
 
-This app is intended for NAS administrators. It is not directed at children. We do not knowingly collect personal data from children. Do not let minors use administrator credentials. If you believe a child has provided data, delete the data directory and contact us.
+This app is intended for NAS administrators. It is not directed at children. We do not knowingly collect personal data from children. Do not let minors use administrator credentials. If you believe a child has provided data, uninstall the app and contact us.
 
 ## 5. Your rights and how to exercise them
 
-These methods are genuine and effective: the files live on your NAS under the data directory you chose, and you can e-mail the controller.
+These methods are genuine and effective: the files live on your NAS in the UGOS package data directory, and you can e-mail the controller.
 
 According to the General Data Protection Regulation (GDPR), you have the following rights:
 
@@ -77,15 +77,15 @@ Ivica Kampic, Runlevel, Leipziger Str. 33, 89537 Giengen, Deutschland
 
 Practical local steps on the NAS:
 
-- **Access / portability:** copy the data directory (JSON settings, consent file). Passwords are stored hashed or encrypted; we cannot recover the plaintext app password.
-- **Correction:** change values in the app UI, or edit/delete files in the data directory.
-- **Deletion:** delete the data directory, or uninstall the app and remove that folder.
+- **Access / portability:** copy the package data folder (JSON settings, consent file). Passwords are stored hashed or encrypted; we cannot recover the plaintext app password.
+- **Correction:** change values in the app UI, or edit/delete files in the package data folder.
+- **Deletion:** uninstall the app (this removes the package data directory).
 - **Withdraw consent:** tap **Decline** on the privacy dialog, or delete `privacy_consent.json`.
 - **Restrict / object:** Decline consent; or uninstall.
 
 ## 6. Storage period
 
-Local files remain until you delete them or remove the data directory. There is no Runlevel cloud retention, because Runlevel does not receive the data.
+Local files remain until you uninstall the app. There is no Runlevel cloud retention, because Runlevel does not receive the data.
 
 ## 7. Security
 

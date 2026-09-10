@@ -12,10 +12,9 @@ Read-only security overview for administrators: login/auth activity from system 
 ## Install / configure
 
 1. Install **Docker** suite.
-2. Install **Security Hub**.
-3. Set **Data directory** (empty folder after a reinstall if you want the first-launch privacy dialog again).
-4. Open the app. First screen: **privacy consent** (Agree and Decline). Then set an app password.
-5. The app password is not sent as HTTP plaintext (`password_enc`).
+2. Install **Security Hub**. There is no extra data-folder parameter: app password and consent are stored in the package directory and are **removed on uninstall**.
+3. Open the app. First screen: **privacy consent** (Agree and Decline). Then set an app password.
+4. The app password is not sent as HTTP plaintext (`password_enc`).
 
 ## Core usage
 

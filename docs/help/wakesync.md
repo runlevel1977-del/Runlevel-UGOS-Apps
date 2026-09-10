@@ -22,7 +22,7 @@ On a schedule: Wake-on-LAN a second NAS/PC, wait until SMB is reachable, then ru
 ## Core usage
 
 1. Open Wake & Sync, confirm privacy, sign in.
-2. Add **target device** (IP, MAC, SMB credentials). The password is sent encrypted (`password_enc`), not as HTTP plaintext.
+2. Add **target device** (IP, MAC, SMB credentials). Host, MAC, username and password are sent encrypted (`host_enc` / `mac_enc` / `username_enc` / `password_enc`), not as HTTP plaintext.
 3. Create a **plan**: sources → destination, schedule, wait timeout.
 4. Enable the plan or run once.
 5. Watch job progress; use **Stop** if needed.

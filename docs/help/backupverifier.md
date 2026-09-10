@@ -21,11 +21,11 @@ Read-only comparison of two folder trees (local or SMB) to verify backups match.
 ## Core usage
 
 1. Open Backup Verifier, confirm privacy, sign in.
-2. Add devices if comparing remote SMB shares. The password is sent encrypted (`password_enc`), not as HTTP plaintext.
+2. Add devices if comparing remote SMB shares. Host, username and password are sent encrypted (`host_enc` / `username_enc` / `password_enc`), not as HTTP plaintext.
 3. Create a **job**: left path (source/original) vs right path (backup).
 4. Run verification (read-only — no writes to compared folders).
 5. Review mismatch report / log.
-6. Optional: enable schedule + notifications.
+6. Optional: enable schedule + notifications. Email, SMTP user, chat id and host are sent encrypted (`email_*_enc`, `smtp_user_enc`, `telegram_chat_id_enc`), not as HTTP plaintext.
 
 ## Tips
 

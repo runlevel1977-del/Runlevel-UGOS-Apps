@@ -8,7 +8,7 @@
 **E-mail:** runlevel1977@posteo.de  
 **Registered / office address:** Ivica Kampic, Runlevel, Leipziger Str. 33, 89537 Giengen, Deutschland  
 **Effective date:** 4 September 2026  
-**Last updated:** 4 September 2026
+**Last updated:** 10 September 2026
 
 This policy describes personal data processed by Backup Verifier when installed on a UGREEN NAS. The app runs locally on the device. Runlevel does not operate a cloud backend for this app and does not receive your NAS files.
 
@@ -39,9 +39,9 @@ This policy describes personal data processed by Backup Verifier when installed 
 | Business function | Data | Purpose | Method | Scope / retention |
 |---|---|---|---|---|
 | Install | UGOS folder shortcut; optional LAN scan CIDR / extra hosts | Run the app | UGOS install parameters (no passwords) | Until uninstall |
-| SMB devices | Display name, host, SMB username/password | Compare folders over SMB | Stored **encrypted at rest**; passwords are **RSA-encrypted in transit** on HTTP and are **never returned** to the UI | Until you delete the device or uninstall |
+| SMB devices | Display name, host, SMB username/password | Compare folders over SMB | Stored **encrypted at rest**; host, username and password are **RSA-encrypted in transit** on HTTP. Usernames are **not returned** to the UI | Until you delete the device or uninstall |
 | Jobs / schedules | Source and destination paths, interval | Read-only verification | Local JSON in the package data dir | Until you delete the job or uninstall |
-| Notifications | Telegram token/chat, SMTP host/user/password, email from/to | Alerts on mismatch | Entered **in the app** after consent (not as install env); secrets encrypted at rest and on the HTTP path | Until you clear settings or uninstall |
+| Notifications | Telegram token/chat, SMTP host/user/password, email from/to | Alerts on mismatch | Entered **in the app** after consent (not as install env); secrets and personal fields (email, chat id, SMTP user/host) are encrypted at rest and as `*_enc` on HTTP. API responses do **not** echo these values | Until you clear settings or uninstall |
 | Consent | Agree/decline, timestamp, policy version | Record your choice | `privacy_consent.json` | Until uninstall |
 | App login | App password (you choose) | Block unauthorized access | Salted hash; password is **RSA-encrypted in transit** (not HTTP plaintext) | Until uninstall |
 | Logs | Job status (passwords redacted) | Troubleshooting | App log | Until uninstall |

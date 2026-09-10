@@ -8,7 +8,7 @@
 **E-mail:** runlevel1977@posteo.de  
 **Registered / office address:** Ivica Kampic, Runlevel, Leipziger Str. 33, 89537 Giengen, Deutschland  
 **Effective date:** 4 September 2026  
-**Last updated:** 4 September 2026
+**Last updated:** 10 September 2026
 
 This policy describes personal data processed by Wake & Sync when installed on a UGREEN NAS. The app runs locally on the device. Runlevel does not operate a cloud backend for this app and does not receive your NAS data.
 
@@ -39,9 +39,9 @@ This policy describes personal data processed by Wake & Sync when installed on a
 | Business function | Data | Purpose | Method | Scope / retention |
 |---|---|---|---|---|
 | Install | UGOS folder shortcut; optional WoL broadcast / source IP | Run the app | UGOS install parameters (no passwords) | Until uninstall |
-| Peer NAS / SMB | Display name, IP, MAC, SMB username/password | Wake-on-LAN and sync | Stored **encrypted at rest**; passwords are **RSA-encrypted in transit** on HTTP and are never shown again in the UI | Until you delete the device or uninstall |
-| Schedules | Source/target paths, timetable | Run planned sync | Local JSON in the package data dir | Until you delete the plan or uninstall |
-| Notifications | Telegram token/chat, SMTP host/user/password, email from/to | Alerts | Entered **in the app** after consent (not as install env); secrets encrypted at rest and on the HTTP path | Until you clear settings or uninstall |
+| Peer NAS / SMB | Display name, IP, MAC, SMB username/password | Wake-on-LAN and sync | Stored **encrypted at rest**; host, MAC, username and password are **RSA-encrypted in transit** on HTTP. IP/MAC/username are **not returned** in API JSON | Until you delete the device or uninstall |
+| Schedules | Source/target paths, timetable | Run planned sync | Local JSON in the package data dir; plan API responses do not echo target IP/MAC | Until you delete the plan or uninstall |
+| Notifications | Telegram token/chat, SMTP host/user/password, email from/to | Alerts | Entered **in the app** after consent (not as install env); secrets and personal fields (email, chat id, SMTP user/host) are encrypted at rest and as `*_enc` on HTTP. API responses do **not** echo these values | Until you clear settings or uninstall |
 | Consent | Agree/decline, timestamp, policy version | Record your choice | `privacy_consent.json` | Until uninstall |
 | App login | App password (you choose) | Block unauthorized access | Salted hash; password is **RSA-encrypted in transit** (not HTTP plaintext) | Until uninstall |
 | Logs | Job status (passwords redacted) | Troubleshooting | App log | Until uninstall |
