@@ -7,7 +7,7 @@
 
 ## What it does
 
-Live NAS dashboard: CPU, RAM, network, volumes, RAID/SMART (where available) via UGOS Web API and host metrics. Docker container listing is not included (the app does not mount `docker.sock`).
+Live NAS dashboard: CPU, RAM, network, volumes, RAID/SMART (where available) via UGOS Web API and host metrics. The Docker table lists local containers from Docker metadata on the NAS volume (`/volume1/@docker`). The app does **not** mount `docker.sock` and cannot start, stop, or create containers.
 
 ## Install / configure
 
@@ -22,7 +22,7 @@ Live NAS dashboard: CPU, RAM, network, volumes, RAID/SMART (where available) via
 1. Open Stats Hub from the UGOS desktop.
 2. Confirm the privacy dialog, then sign in with the app password.
 3. Confirm live widgets update (CPU/RAM/network).
-4. Check volumes / disks. Docker listing is not available (no `docker.sock`).
+4. Check volumes, disks, and the Docker table (running containers on this NAS).
 5. Footer links: Help, Privacy, Support (email / Issues).
 
 ## Tips

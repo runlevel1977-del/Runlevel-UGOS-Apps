@@ -20,7 +20,7 @@ Official open-source repository for **Runlevel** Docker applications on
 | Publisher | https://github.com/runlevel1977-del |
 | License | https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/EULA.md, https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/LICENSE |
 | Source | https://github.com/runlevel1977-del/Runlevel-UGOS-Apps, https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/THIRD_PARTY_LICENSES.md |
-| Support | mailto:runlevel1977@posteo.de, https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues |
+| Support | https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues |
 | Help | https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/README.md (per-app guides in `docs/help/`) |
 
 Per-app `privacy_policy_link` values point to `docs/privacy/<app>.md`.

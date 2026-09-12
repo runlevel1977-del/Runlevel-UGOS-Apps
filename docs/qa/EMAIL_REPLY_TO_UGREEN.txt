@@ -45,9 +45,9 @@ In-app footers also link to Help, Privacy, and Support.
 ------------------------------------------------------------
 4) Technical Support field (UPK)
 ------------------------------------------------------------
-Configured in each project.yaml as technical_support_link:
+Configured in each project.yaml as technical_support_link
+(http/https webpage only; App Center does not accept mailto):
 
-- mailto:runlevel1977@posteo.de
 - https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues
 
 ------------------------------------------------------------

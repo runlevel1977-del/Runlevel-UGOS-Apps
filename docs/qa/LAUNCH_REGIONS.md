@@ -32,4 +32,4 @@ Further regions can be added later with additional App Center locales.
 | Official | https://github.com/runlevel1977-del/Runlevel-UGOS-Apps |
 | Publisher link | https://github.com/runlevel1977-del |
 | Help | https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/`<slug>`.md |
-| Technical support | mailto:runlevel1977@posteo.de · https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues |
+| Technical support | https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues |

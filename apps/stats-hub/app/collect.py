@@ -7,8 +7,12 @@ import os
 import posixpath
 import re
 import shlex
+import signal
+import socket
+import struct
 import subprocess
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
@@ -23,19 +27,38 @@ _VOL_ROOT = re.compile(r"^/volume\d+$", re.I)
 
 
 def _run(cmd: str, timeout: int = 30) -> str:
+    """Run shell cmd; on timeout kill the whole process group (not only the shell)."""
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
             shell=True,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
             executable="/bin/bash",
             errors="replace",
+            start_new_session=True,
         )
-        return (proc.stdout or "") + (proc.stderr or "")
-    except (subprocess.TimeoutExpired, OSError):
+    except OSError:
         return ""
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (OSError, ProcessLookupError):
+            try:
+                proc.kill()
+            except OSError:
+                pass
+        try:
+            proc.communicate(timeout=2)
+        except Exception:
+            pass
+        return ""
+    except Exception:
+        return ""
+    return (stdout or "") + (stderr or "")
 
 
 def is_dashboard_mount(mp: str) -> bool:
@@ -146,6 +169,171 @@ def parse_volumes(df_text: str) -> list[dict[str, Any]]:
             "total_h": fmt_size_1k(total_1k),
         }
     return sorted(found.values(), key=lambda r: mount_sort_key(str(r["path"])))
+
+
+_nsenter_ok: bool | None = None
+
+
+def _netns_link(path: str) -> str:
+    try:
+        return os.readlink(path)
+    except OSError:
+        return ""
+
+
+def _use_host_netns() -> bool:
+    """True when pid:host but the container still has its own Docker netns."""
+    host = _netns_link("/proc/1/ns/net")
+    self = _netns_link("/proc/self/ns/net")
+    return bool(host and self and host != self)
+
+
+def _host_netns_run(cmd: str, timeout: int = 2) -> str:
+    """Optional nsenter helper. Never used on the live tick path (it can hang)."""
+    global _nsenter_ok
+    if _nsenter_ok is False:
+        return ""
+    out = _run(f"nsenter -t 1 -n -- {cmd}", timeout)
+    stripped = (out or "").strip()
+    if stripped and stripped not in ("[]",):
+        _nsenter_ok = True
+        return out
+    _nsenter_ok = False
+    return ""
+
+
+def _net_proc_file(name: str) -> str:
+    if _use_host_netns() and os.path.isfile(f"/proc/1/net/{name}"):
+        return f"/proc/1/net/{name}"
+    return f"/proc/net/{name}"
+
+
+def _read_text_file(path: str) -> str:
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except OSError:
+        return ""
+
+
+def _sys_net_field(ifn: str, rel: str) -> str:
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", ifn):
+        return ""
+    # Do not read /proc/1/root — that path can hang in Docker and stall the UI.
+    return _read_text_file(f"/sys/class/net/{ifn}/{rel}").strip()
+
+
+def _proc_hex_ipv4(h: str) -> str:
+    try:
+        return socket.inet_ntoa(struct.pack("<I", int(h, 16)))
+    except (ValueError, OSError, struct.error):
+        return ""
+
+
+def parse_proc_default_route(text: str = "") -> tuple[str, str]:
+    """IPv4 default route from /proc/net/route: (gateway, iface)."""
+    raw = text or _read_text_file(_net_proc_file("route"))
+    for line in raw.splitlines()[1:]:
+        parts = line.split()
+        if len(parts) < 8:
+            continue
+        if parts[1] != "00000000":
+            continue
+        gw = _proc_hex_ipv4(parts[2])
+        if gw and gw != "0.0.0.0":
+            return gw, parts[0]
+    return "", ""
+
+
+def _local_ipv4s_from_fib(text: str) -> list[str]:
+    ips: list[str] = []
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        m = re.match(r"^\s+\|--\s+(\d+\.\d+\.\d+\.\d+)\s*$", line)
+        if not m:
+            continue
+        window = "\n".join(lines[i : i + 4])
+        if "host LOCAL" not in window:
+            continue
+        ip = m.group(1)
+        if ip.startswith("127.") or ip.startswith("255."):
+            continue
+        ips.append(ip)
+    return ips
+
+
+def _assign_ipv4_to_ifaces(ifaces: list[str], fib: str, route: str) -> dict[str, list[str]]:
+    """Map local IPv4 addresses onto iface names via the route table."""
+    out: dict[str, list[str]] = {k: [] for k in ifaces}
+    nets: list[tuple[str, int, int]] = []
+    for line in route.splitlines()[1:]:
+        parts = line.split()
+        if len(parts) < 8:
+            continue
+        ifn = parts[0]
+        if ifn not in out:
+            continue
+        dest = int(parts[1], 16)
+        mask = int(parts[7], 16)
+        if mask == 0:
+            continue
+        nets.append((ifn, dest, mask))
+    nets.sort(key=lambda t: t[2], reverse=True)
+    for ip in _local_ipv4s_from_fib(fib):
+        try:
+            ip_le = int.from_bytes(socket.inet_aton(ip), "little")
+        except OSError:
+            continue
+        placed = False
+        for ifn, dest, mask in nets:
+            if (ip_le & mask) == dest:
+                plen = bin(mask).count("1")
+                addr = f"{ip}/{plen}"
+                if addr not in out[ifn]:
+                    out[ifn].append(addr)
+                placed = True
+                break
+        if placed:
+            continue
+        if len(ifaces) == 1:
+            out[ifaces[0]].append(f"{ip}/32")
+    return out
+
+
+def fill_iface_meta(info: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Fill MAC / operstate / IPv4 when `ip` cannot see the host netns (no nsenter)."""
+    names = list(info.keys())
+    if not names:
+        return info
+    fib = _read_text_file(_net_proc_file("fib_trie"))
+    route = _read_text_file(_net_proc_file("route"))
+    assigned = _assign_ipv4_to_ifaces(names, fib, route) if fib else {}
+    for ifn, meta in info.items():
+        if not meta.get("mac"):
+            mac = _sys_net_field(ifn, "address")
+            if mac and mac != "00:00:00:00:00:00":
+                meta["mac"] = mac
+        if not meta.get("state"):
+            st = _sys_net_field(ifn, "operstate")
+            if st:
+                meta["state"] = st
+        if not meta.get("addrs") and assigned.get(ifn):
+            meta["addrs"] = list(assigned[ifn])
+        if not meta.get("state") and (meta.get("addrs") or meta.get("mac")):
+            meta["state"] = "up"
+    return info
+
+
+def is_docker_bridge_iface(meta: dict[str, Any]) -> bool:
+    """Container veth on docker0 (MAC 02:42:… + 172.17/172.18) — not the NAS LAN NIC."""
+    mac = str(meta.get("mac") or "").lower().replace("-", ":")
+    if not mac.startswith("02:42:"):
+        return False
+    for addr in meta.get("addrs") or []:
+        a = str(addr)
+        if a.startswith("172.17.") or a.startswith("172.18."):
+            return True
+    return False
 
 
 def physical_ifaces(net_text: str) -> dict[str, tuple[int, int]]:
@@ -334,7 +522,8 @@ def collect_df_block() -> str:
         "done\n"
         "df -P /volume1 /volume2 2>/dev/null | tail -n +2 || true\n"
     )
-    return _run(cmd, timeout=45)
+    # Keep short: during Transfer Hub / heavy I/O, long df can stall the monitor.
+    return _run(cmd, timeout=8)
 
 
 def _docker_health_from_status(status: str) -> str:
@@ -350,6 +539,147 @@ def _docker_health_from_status(status: str) -> str:
 
 def _is_runlevel_image(image: str) -> bool:
     return "runlevel/" in (image or "").lower()
+
+
+_DOCKER_CPU_LOCK = threading.Lock()
+_prev_docker_cpu: dict[str, tuple[int, float]] = {}
+
+
+def _docker_container_dirs() -> list[str]:
+    extra = (os.environ.get("STATS_HUB_DOCKER_CONTAINERS_DIR") or "").strip()
+    roots: list[str] = []
+    if extra:
+        roots.append(extra)
+    roots.extend(("/volume1/@docker/containers", "/volume2/@docker/containers"))
+    return [p for p in roots if os.path.isdir(p)]
+
+
+def _read_json_file(path: str) -> dict[str, Any] | None:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else None
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+
+def _docker_name(cfg: dict[str, Any], folder: str) -> str:
+    name = str(cfg.get("Name") or "").strip()
+    if name.startswith("/"):
+        name = name[1:]
+    return name or folder[:12]
+
+
+def _docker_image(cfg: dict[str, Any]) -> str:
+    config = cfg.get("Config")
+    if isinstance(config, dict):
+        img = str(config.get("Image") or "").strip()
+        if img:
+            return img
+    return str(cfg.get("Image") or "").strip()
+
+
+def _docker_env_lines(cfg: dict[str, Any]) -> list[str]:
+    config = cfg.get("Config")
+    if not isinstance(config, dict):
+        return []
+    env = config.get("Env")
+    if isinstance(env, list):
+        return [str(x) for x in env]
+    return []
+
+
+def _is_runlevel_container(image: str, cfg: dict[str, Any]) -> bool:
+    if _is_runlevel_image(image):
+        return True
+    return any(line.startswith("UGOS_APP_ID=com.runlevel.") for line in _docker_env_lines(cfg))
+
+
+def _docker_status_text(state: dict[str, Any]) -> str:
+    status = str(state.get("Status") or "").strip()
+    if not status:
+        status = "running" if state.get("Running") else "exited"
+    health = ""
+    raw_health = state.get("Health")
+    if isinstance(raw_health, dict):
+        health = str(raw_health.get("Status") or "").strip().lower()
+    if health in ("healthy", "unhealthy", "starting"):
+        return f"{status} ({health})"
+    return status
+
+
+def _cgroup_dir(cid: str) -> str:
+    cid = (cid or "").strip()
+    if not cid:
+        return ""
+    for path in (
+        f"/sys/fs/cgroup/system.slice/docker-{cid}.scope",
+        f"/sys/fs/cgroup/docker/{cid}",
+        f"/sys/fs/cgroup/memory/docker/{cid}",
+    ):
+        if os.path.isdir(path):
+            return path
+    return ""
+
+
+def _read_int_file(path: str) -> int | None:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = fh.read().strip()
+    except OSError:
+        return None
+    if not raw or raw in ("max", "-1"):
+        return None
+    try:
+        return int(raw.split()[0])
+    except ValueError:
+        return None
+
+
+def _cgroup_cpu_pct(cid: str, cg: str) -> str:
+    usage: int | None = None
+    try:
+        with open(os.path.join(cg, "cpu.stat"), encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("usage_usec"):
+                    usage = int(line.split()[1])
+                    break
+    except (OSError, ValueError, IndexError):
+        usage = None
+    if usage is None:
+        usage_ns = _read_int_file(os.path.join(cg, "cpuacct.usage"))
+        if usage_ns is not None:
+            usage = usage_ns // 1000
+    if usage is None:
+        return ""
+    now = time.monotonic()
+    with _DOCKER_CPU_LOCK:
+        prev = _prev_docker_cpu.get(cid)
+        _prev_docker_cpu[cid] = (usage, now)
+    if not prev:
+        return ""
+    prev_u, prev_t = prev
+    dt = now - prev_t
+    du = usage - prev_u
+    if dt <= 0.05 or du < 0:
+        return ""
+    pct = (du / (dt * 1_000_000.0)) * 100.0
+    return f"{pct:.1f}%"
+
+
+def _cgroup_mem(cg: str) -> str:
+    cur = _read_int_file(os.path.join(cg, "memory.current"))
+    if cur is None:
+        cur = _read_int_file(os.path.join(cg, "memory.usage_in_bytes"))
+    if cur is None:
+        return ""
+    lim = _read_int_file(os.path.join(cg, "memory.max"))
+    if lim is None:
+        lim = _read_int_file(os.path.join(cg, "memory.limit_in_bytes"))
+    used = fmt_size_1k(max(0, cur) // 1024)
+    if lim and lim > 0:
+        return f"{used} / {fmt_size_1k(lim // 1024)}"
+    return used
 
 
 def parse_docker_system_df(raw: str) -> dict[str, str]:
@@ -494,23 +824,30 @@ def _is_rotational_disk(name: str) -> bool:
     return rot == "1"
 
 
-def _diskstats_sectors(name: str) -> tuple[int, int] | None:
+def _diskstats_map() -> dict[str, tuple[int, int]]:
+    out: dict[str, tuple[int, int]] = {}
     for line in _run("cat /proc/diskstats 2>/dev/null", 5).splitlines():
         parts = line.split()
-        if len(parts) >= 10 and parts[2] == name:
-            try:
-                return int(parts[5]), int(parts[9])
-            except ValueError:
-                return None
-    return None
+        if len(parts) < 10:
+            continue
+        try:
+            out[parts[2]] = (int(parts[5]), int(parts[9]))
+        except ValueError:
+            continue
+    return out
+
+
+def _diskstats_sectors(name: str) -> tuple[int, int] | None:
+    return _diskstats_map().get(name)
 
 
 def refresh_disk_io_flags(names: list[str]) -> dict[str, bool]:
     """True if read/write sectors changed since the previous collect_disk_temps run."""
     flags: dict[str, bool] = {}
+    cur_map = _diskstats_map()
     with _diskstats_lock:
         for name in names:
-            cur = _diskstats_sectors(name)
+            cur = cur_map.get(name)
             if cur is None:
                 flags[name] = False
                 continue
@@ -518,6 +855,31 @@ def refresh_disk_io_flags(names: list[str]) -> dict[str, bool]:
             _prev_diskstats[name] = cur
             flags[name] = bool(prev and (cur[0] > prev[0] or cur[1] > prev[1]))
     return flags
+
+
+def disks_io_busy(*, min_sectors: int = 4096, sample_sec: float = 0.45) -> bool:
+    """True if any disk has significant IO in a short window (Transfer Hub, scrub).
+
+    Does not mutate ``_prev_diskstats`` used by SMART collection. The old
+    implementation compared against the last 2-minute SMART sample and treated
+    almost every poll as busy, so temperatures never refreshed.
+    """
+    disks = _list_lsblk_disks()
+    names = [d["name"] for d in disks]
+    if not names:
+        return False
+    first = _diskstats_map()
+    time.sleep(max(0.15, float(sample_sec)))
+    second = _diskstats_map()
+    for name in names:
+        prev = first.get(name)
+        cur = second.get(name)
+        if prev is None or cur is None:
+            continue
+        delta = (cur[0] - prev[0]) + (cur[1] - prev[1])
+        if delta >= min_sectors:
+            return True
+    return False
 
 
 def _skip_standby_for_disk(name: str, skip_standby: bool) -> bool:
@@ -542,13 +904,13 @@ def _smartctl_query(
     pfx = "-T permissive " if permissive else ""
     dflag = f"-d {dtype} " if dtype else ""
     nflag = "-n standby,q " if skip_standby else ""
-    info_raw = _run(f"{sc} {pfx}{nflag}-i {dflag}{shlex.quote(dev)} 2>&1", 8)
-    json_raw = _run(f"{sc} {pfx}{nflag}-A -j {dflag}{shlex.quote(dev)} 2>&1", 10)
+    info_raw = _run(f"{sc} {pfx}{nflag}-i {dflag}{shlex.quote(dev)} 2>&1", 5)
+    json_raw = _run(f"{sc} {pfx}{nflag}-A -j {dflag}{shlex.quote(dev)} 2>&1", 6)
     skipped = skip_standby and _smartctl_skipped_standby(info_raw + json_raw)
     temp = _smartctl_temp_from_json(json_raw)
     attr_raw = json_raw if temp is not None else ""
     if temp is None and not skipped:
-        attr_raw = _run(f"{sc} {pfx}{nflag}-A {dflag}{shlex.quote(dev)} 2>&1", 10)
+        attr_raw = _run(f"{sc} {pfx}{nflag}-A {dflag}{shlex.quote(dev)} 2>&1", 6)
         skipped = skip_standby and _smartctl_skipped_standby(attr_raw)
         if not skipped:
             temp = _smartctl_temp_from_text(attr_raw)
@@ -585,23 +947,65 @@ def _read_sysfs_serial(name: str) -> str:
     return ""
 
 
+def _nvme_ctrl_name(name: str) -> str:
+    m = re.fullmatch(r"(nvme\d+)n\d+", name)
+    return m.group(1) if m else ""
+
+
+def _hwmon_temp_from_file(path: str) -> float | None:
+    if not path:
+        return None
+    raw = _run(f"cat {shlex.quote(path)} 2>/dev/null", 3).strip()
+    if not raw.isdigit():
+        return None
+    v = int(raw)
+    if v > 1000:
+        v //= 1000
+    if 0 < v < 120:
+        return float(v)
+    return None
+
+
 def _read_hwmon_block_temp(name: str) -> float | None:
+    """NVMe/SATA temps from sysfs (works with /sys:ro, no SMART ioctl)."""
     if not re.fullmatch(r"[a-zA-Z0-9._-]+", name):
         return None
-    for hz in (
-        _run(f"ls /sys/block/{name}/device/hwmon/hwmon*/temp*_input 2>/dev/null", 3)
-        .strip()
-        .split()
-    ):
-        if not hz:
+    globs = [
+        f"/sys/block/{name}/device/hwmon/hwmon*/temp*_input",
+        f"/sys/block/{name}/device/device/hwmon/hwmon*/temp*_input",
+    ]
+    ctrl = _nvme_ctrl_name(name)
+    if ctrl:
+        globs.extend(
+            [
+                f"/sys/class/nvme/{ctrl}/hwmon*/temp*_input",
+                f"/sys/class/nvme/{ctrl}/device/hwmon/hwmon*/temp*_input",
+            ]
+        )
+    for pattern in globs:
+        for hz in _run(f"ls {pattern} 2>/dev/null", 3).strip().split():
+            temp = _hwmon_temp_from_file(hz)
+            if temp is not None:
+                return temp
+    blk_dev = _run(f"readlink -f /sys/block/{name}/device 2>/dev/null", 3).strip()
+    for hm in _run("ls -d /sys/class/hwmon/hwmon* 2>/dev/null", 5).split():
+        hm = hm.strip()
+        if not hm:
             continue
-        raw = _run(f"cat {shlex.quote(hz)} 2>/dev/null", 3).strip()
-        if raw.isdigit():
-            v = int(raw)
-            if v > 1000:
-                v //= 1000
-            if 0 < v < 120:
-                return float(v)
+        link = _run(f"readlink -f {hm}/device 2>/dev/null", 3).strip()
+        if not link:
+            continue
+        matched = False
+        if blk_dev and (link == blk_dev or blk_dev in link or link in blk_dev):
+            matched = True
+        if ctrl and ctrl in link.split("/"):
+            matched = True
+        if not matched:
+            continue
+        for hz in _run(f"ls {hm}/temp*_input 2>/dev/null", 3).split():
+            temp = _hwmon_temp_from_file(hz.strip())
+            if temp is not None:
+                return temp
     return None
 
 
@@ -837,10 +1241,16 @@ def _collect_one_disk_temp(
     use_skip = _skip_standby_for_disk(name, skip_standby)
     temp: float | None = None
     skipped_standby = False
-    if sc:
+    # sysfs first — NVMe temps live in hwmon and do not need SMART ioctl (/dev:ro).
+    if name.startswith("nvme"):
+        temp = _read_hwmon_block_temp(name)
+    if temp is None and sc:
         temp, si, sm, skipped_standby = _try_smartctl_disk_temp(sc, name, use_skip=use_skip)
         serial = serial or si
         model = model or sm
+        # Disk already had recent I/O → safe to read SMART without waking from sleep.
+        # Never retry without -n standby just because the first probe was inconclusive —
+        # that would spin sleeping HDDs back up.
         if (
             use_skip
             and temp is None
@@ -853,17 +1263,7 @@ def _collect_one_disk_temp(
             if t2 is not None:
                 temp = t2
                 skipped_standby = False
-        if (
-            use_skip
-            and temp is None
-            and not skipped_standby
-        ):
-            t2, si2, sm2, _skip2 = _try_smartctl_disk_temp(sc, name, use_skip=False)
-            serial = serial or si2
-            model = model or sm2
-            if t2 is not None:
-                temp = t2
-    if temp is None and not skipped_standby:
+    if temp is None:
         temp = _read_hwmon_block_temp(name)
 
     label = model or name
@@ -987,44 +1387,50 @@ def collect_top_processes(limit: int = 5) -> list[dict[str, Any]]:
 
 
 def collect_docker(*, live_stats: bool = True) -> dict[str, Any]:
-    raw = _run(
-        "docker ps -a --format '{{.Names}}\t{{.Status}}\t{{.Image}}' 2>/dev/null | head -n 64",
-        timeout=12,
-    )
+    """List containers from Docker metadata on the volume (no docker.sock)."""
     rows: list[dict[str, Any]] = []
-    for line in raw.splitlines():
-        parts = line.strip().split("\t")
-        if len(parts) < 2:
+    seen: set[str] = set()
+    for root in _docker_container_dirs():
+        try:
+            folders = os.listdir(root)
+        except OSError:
             continue
-        name, status = parts[0], parts[1]
-        image = parts[2] if len(parts) > 2 else ""
-        rows.append({
-            "name": name,
-            "status": status,
-            "image": image,
-            "running": status.lower().startswith("up"),
-            "health": _docker_health_from_status(status),
-            "runlevel": _is_runlevel_image(image),
-        })
-    stats_map: dict[str, dict[str, str]] = {}
-    if live_stats:
-        stats_raw = _run(
-            "docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' 2>/dev/null",
-            15,
-        )
-        for line in stats_raw.splitlines():
-            p = line.strip().split("\t")
-            if len(p) >= 3:
-                stats_map[p[0]] = {"cpu": p[1], "mem": p[2]}
-    for row in rows:
-        st = stats_map.get(row["name"], {})
-        row["cpu_live"] = st.get("cpu", "")
-        row["mem_live"] = st.get("mem", "")
-    df_raw = _run("docker system df 2>/dev/null", 10) if live_stats else ""
-    return {
-        "containers": rows,
-        "system_df": parse_docker_system_df(df_raw),
-    }
+        for folder in folders:
+            if folder in seen or len(folder) < 12:
+                continue
+            cfg = _read_json_file(os.path.join(root, folder, "config.v2.json"))
+            if cfg is None:
+                cfg = _read_json_file(os.path.join(root, folder, "config.json"))
+            if not cfg:
+                continue
+            seen.add(folder)
+            state = cfg.get("State") if isinstance(cfg.get("State"), dict) else {}
+            running = bool(state.get("Running"))
+            image = _docker_image(cfg)
+            status = _docker_status_text(state)
+            row: dict[str, Any] = {
+                "name": _docker_name(cfg, folder),
+                "status": status,
+                "image": image,
+                "running": running,
+                "health": _docker_health_from_status(status),
+                "runlevel": _is_runlevel_container(image, cfg),
+                "cpu_live": "",
+                "mem_live": "",
+            }
+            if live_stats and running:
+                cid = str(cfg.get("ID") or folder)
+                cg = _cgroup_dir(cid) or _cgroup_dir(folder)
+                if cg:
+                    row["cpu_live"] = _cgroup_cpu_pct(folder, cg)
+                    row["mem_live"] = _cgroup_mem(cg)
+            rows.append(row)
+            if len(rows) >= 64:
+                break
+        if len(rows) >= 64:
+            break
+    rows.sort(key=lambda r: (not bool(r.get("running")), str(r.get("name") or "").casefold()))
+    return {"containers": rows, "system_df": {}}
 
 
 def collect_os_info() -> dict[str, str]:
@@ -1089,13 +1495,31 @@ echo "$max"
 
 
 def collect_light_tick(*, include_hw_sensors: bool = False) -> dict[str, str]:
-    """Fast host read — no df/findmnt (disk I/O)."""
+    """Fast host read — no df/findmnt (disk I/O), no nsenter (hangs in UGOS Docker)."""
+    self_net = _run("cat /proc/net/dev", 5)
+    host_net = (
+        _run("cat /proc/1/net/dev 2>/dev/null", 5)
+        if os.path.exists("/proc/1/net/dev")
+        else ""
+    )
+    use_host = _use_host_netns()
+    if not use_host and host_net:
+        extra = set(physical_ifaces(host_net)) - set(physical_ifaces(self_net))
+        if extra:
+            use_host = True
+    net = (host_net if use_host else self_net) or self_net
+    # Host netns: `ip` in the container is the Docker bridge. IPs come from /proc later.
+    if use_host:
+        ipj, rtj = "[]", "[]"
+    else:
+        ipj = _run("ip -j addr 2>/dev/null || echo []", 8)
+        rtj = _run("ip -j route 2>/dev/null || echo []", 8)
     out = {
         "cpu": _run("grep '^cpu ' /proc/stat | head -1", 5),
         "mem": _run("free | grep Mem", 5),
-        "net": _run("cat /proc/net/dev", 5),
-        "ipj": _run("ip -j addr 2>/dev/null || echo []", 8),
-        "rtj": _run("ip -j route 2>/dev/null || echo []", 8),
+        "net": net,
+        "ipj": ipj or "[]",
+        "rtj": rtj or "[]",
         "load": _run("cat /proc/loadavg", 5),
     }
     if include_hw_sensors:

@@ -5,8 +5,8 @@ Official help index for the six Runlevel Docker applications on UGREEN NAS (UGOS
 **Developer / Publisher:** Runlevel (Ivica Kampic)  
 **Official page:** https://github.com/runlevel1977-del/Runlevel-UGOS-Apps  
 **Publisher profile:** https://github.com/runlevel1977-del  
-**Technical support:** [runlevel1977@posteo.de](mailto:runlevel1977@posteo.de)  
-**Bug reports:** [GitHub Issues](https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues)
+**Technical support:** [GitHub Issues](https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues)  
+**Email:** [runlevel1977@posteo.de](mailto:runlevel1977@posteo.de)
 
 ## Target launch regions / languages
 

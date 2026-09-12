@@ -32,7 +32,7 @@ Store metadata (name, description, author, official, help, publisher) is localiz
 | Official | https://github.com/runlevel1977-del/Runlevel-UGOS-Apps |
 | Publisher link | https://github.com/runlevel1977-del |
 | Help | Per-app guide under `docs/help/<slug>.md` |
-| Technical support | `mailto:runlevel1977@posteo.de` · https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues |
+| Technical support | https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues |
 
 ---
 

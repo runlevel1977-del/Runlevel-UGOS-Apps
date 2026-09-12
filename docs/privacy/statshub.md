@@ -8,7 +8,7 @@
 **E-mail:** runlevel1977@posteo.de  
 **Registered / office address:** Ivica Kampic, Runlevel, Leipziger Str. 33, 89537 Giengen, Deutschland  
 **Effective date:** 4 September 2026  
-**Last updated:** 4 September 2026
+**Last updated:** 12 September 2026
 
 This policy describes personal data processed by Stats Hub when installed on a UGREEN NAS. The app runs locally on the device. Runlevel does not operate a cloud backend for this app and does not receive your NAS data.
 
@@ -100,7 +100,7 @@ Local files remain until you delete them or remove the data directory. There is 
 - Bridge networking (not Docker host networking); no privileged mode.
 - `/sys` read-only for metrics; optional volume paths for folder-size scans.
 - `/dev` mounted **read-only** only so `smartctl` can read disk temperatures.
-- **`docker.sock` is not mounted.** The app does not talk to the Docker Engine. The Docker table in the UI stays empty.
+- **`docker.sock` is not mounted.** The app does not talk to the Docker Engine (no start/stop/create). The Docker table reads container names and status from Docker metadata already on the NAS volume (`/volume1/@docker/containers`, via the existing read-only `/volume1` mount).
 
 ## Contact
 

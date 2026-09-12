@@ -41,7 +41,7 @@
 | C3 | App opens (`open_type: tab`) | Pass | |
 | C4 | Data directory writable | Pass | Per-app `DATA_PATH` |
 | C5 | App Center: official / publisher links → Runlevel GitHub | Pass | Not ugnas.com |
-| C6 | App Center: technical_support_link → mailto + Issues | Pass | |
+| C6 | App Center: technical_support_link → https GitHub Issues | Pass | No mailto (App Center requires http/https) |
 | C7 | App Center: help → per-app guide | Pass | `docs/help/<slug>.md` |
 | C8 | In-app footer Help / Support / Privacy | Pass | |
 | C9 | Locales en-US / de-DE / zh-CN metadata present | Pass | |
