@@ -40,13 +40,13 @@ parameters:
     i18n:
       en-US:
         name: NAS folders (Volume 1)
-        description: Folders on Volume 1 (e.g. where PC copies land). Change later under Settings. Restart the app after a change.
+        description: "Choose one or more folders on Volume 1 that Moving Files may read and write, for example the share where copies from a PC should land. You can change this later under App Center settings. Restart the app after any change so the folder picker and jobs see the new paths."
       de-DE:
         name: NAS-Ordner (Volume 1)
-        description: Ordner auf Volume 1 (z. B. HierLandetAlles, wo die Daten vom PC landen). Später unter Einstellungen änderbar. Nach Änderung App neu starten.
+        description: "Einen oder mehrere Ordner auf Volume 1 wählen, die Moving Files lesen und schreiben darf, z. B. die Freigabe, in der Kopien vom PC landen. Später in den App-Center-Einstellungen änderbar. Nach jeder Änderung die App neu starten, damit Picker und Jobs die neuen Pfade sehen."
       zh-CN:
         name: NAS 文件夹（卷 1）
-        description: 卷 1 上的文件夹（例如电脑拷贝的目标）。之后可在设置中更改。更改后请重启应用。
+        description: "请选择卷 1 上 Moving Files 可以读写的一个或多个文件夹，例如电脑拷贝文件时使用的共享目录。之后可在应用中心的设置中随时更改授权路径。每次更改后请重启应用，以便文件夹选择器和任务能够看到新的路径。"
   - key: HDD_FOLDER
     type: path
     required: false
@@ -55,17 +55,17 @@ parameters:
     i18n:
       en-US:
         name: Volume 2 / HDD
-        description: Folders on Volume 2 (HDD) for the second copy. Add the HDD share here. Restart the app after a change.
+        description: "Optional folders on Volume 2 (HDD) for a second copy or archive target. Add the HDD share here if you keep a second set of files on that volume. Leave empty if you only use Volume 1. Restart the app after any change so the folder picker lists the new paths."
       de-DE:
         name: Volume 2 / HDD
-        description: Ordner auf Volume 2 (HDD) für die zweite Sicherung. Hier den HDD-Ordner dazunehmen. Nach Änderung App neu starten.
+        description: "Optionale Ordner auf Volume 2 (HDD) für eine zweite Kopie oder als Archivziel. Hier die HDD-Freigabe eintragen, wenn Dateien auch auf diesem Volume liegen sollen. Leer lassen, wenn nur Volume 1 genutzt wird. Nach jeder Änderung die App neu starten."
       zh-CN:
         name: 卷 2 / HDD
-        description: 卷 2（HDD）上的文件夹，用于第二份拷贝。更改后请重启应用。
+        description: "可选：卷 2（HDD）上的文件夹，用于第二份拷贝或作为备份归档的目标。如果文件也要放在该卷上，请在此项中添加对应的共享目录。若只使用卷 1，此项可留空。每次更改后请重启应用，以便文件夹选择器显示新的路径。"
 i18n:
   en-US:
     name: Moving Files
-    description: "Copy and move folders between this NAS, Windows PCs and other NAS devices over SMB. Run several independent jobs, wake a sleeping PC or NAS before a copy, and create dated tar.gz backup archives with optional password protection. German and English in the app."
+    description: "Moving Files copies and moves folders between this UGREEN NAS, Windows PCs and other NAS devices on your network using SMB. Run several independent jobs, wake a sleeping PC or NAS with Wake-on-LAN before a transfer, and create dated tar.gz backup archives with optional password protection. Restore extracts the original folder to a destination you choose. The app is German and English. You grant only the NAS folders it may use; Docker is not required."
     author: Runlevel
     official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
     help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/movingfiles.md"
@@ -73,7 +73,7 @@ i18n:
     publisher_link: "https://github.com/runlevel1977-del"
   de-DE:
     name: Moving Files
-    description: "Ordner zwischen diesem NAS, Windows-PCs und anderen NAS-Geräten per SMB kopieren oder verschieben. Mehrere unabhängige Jobs, Wake-on-LAN vor der Kopie, und datierte tar.gz-Archive mit optionalem Passwort. Oberfläche Deutsch und Englisch."
+    description: "Moving Files kopiert und verschiebt Ordner zwischen diesem UGREEN-NAS, Windows-PCs und anderen NAS-Geräten im Netzwerk per SMB. Mehrere Jobs laufen unabhängig. Schlafende PCs oder NAS werden bei Bedarf per Wake-on-LAN geweckt, bevor die Übertragung startet. Zusätzlich entstehen datierte tar.gz-Sicherungsarchive mit optionalem Passwort; Wiederherstellen legt den ursprünglichen Ordner am gewählten Ziel ab. Oberfläche Deutsch und Englisch. Freigegeben werden nur die NAS-Ordner, die du erlaubst; Docker ist nicht nötig."
     author: Runlevel
     official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
     help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/movingfiles.md"
@@ -81,7 +81,7 @@ i18n:
     publisher_link: "https://github.com/runlevel1977-del"
   zh-CN:
     name: Moving Files
-    description: "通过 SMB 在本 NAS、Windows 电脑和其他 NAS 之间复制或移动文件夹。支持多个独立任务、拷贝前网络唤醒，以及带可选密码的 tar.gz 备份归档。应用内界面为德语和英语。"
+    description: "Moving Files 可在本台 UGREEN NAS、Windows 电脑以及其他 NAS 之间通过 SMB 复制或移动文件夹。支持同时运行多个互不干扰的任务，并在传输开始前通过网络唤醒（Wake-on-LAN）打开已休眠的电脑或 NAS。还可按日期生成 tar.gz 备份归档并可选密码保护；还原时会把原来的文件夹解压到你指定的目录。应用界面提供德语和英语。安装时只需授权真正需要访问的 NAS 文件夹，无需安装 Docker。"
     author: Runlevel
     official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
     help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/movingfiles.md"
