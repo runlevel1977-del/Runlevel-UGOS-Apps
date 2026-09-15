@@ -7,12 +7,12 @@
 
 This document describes how to install, configure, and exercise the **core workflow** of each submitted application.
 
-## Common prerequisites (all six apps)
+## Common prerequisites
 
 1. UGREEN NAS with **UGOS Pro** ≥ `1.13.0.0000` (amd64).
-2. **Docker** suite (`com.ugreen.docker`) ≥ `1.7.0.0000` installed.
+2. **Docker** suite (`com.ugreen.docker`) ≥ `1.7.0.0000` for the six Docker apps. **Moving Files is native and does not need Docker.**
 3. Administrator login (all apps are `only_admin: true`).
-4. Create a dedicated data folder per app under e.g. `/volume1/docker/<app>/data`.
+4. Docker apps: create a dedicated data folder per app under e.g. `/volume1/docker/<app>/data`. Moving Files: grant NAS folders at install.
 
 ## Localization / launch regions
 
@@ -140,6 +140,23 @@ Store metadata (name, description, author, official, help, publisher) is localiz
 **User guide:** https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/lockandkey.md
 
 **Warning for QA:** use only disposable test data.
+
+---
+
+## 7. Moving Files (`com.runlevel.movingfiles`)
+
+**Goal:** Copy a small folder on the NAS and create a backup archive (optional password).
+
+Native app — Docker is **not** required.
+
+| Step | Action | Expected |
+| --- | --- | --- |
+| 1 | Install; grant Volume 1 folder(s); restart if prompted | App opens as a desktop window (port 21010) |
+| 2 | Add a local job: source folder → destination folder, copy | Progress shown; files appear at destination |
+| 3 | Backup: source → destination, optional password, run once | `.tar.gz` or `.tar.gz.enc` appears |
+| 4 | Restore into a test folder (enter password if protected) | Folder contents extracted including the original folder name |
+
+**User guide:** https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/movingfiles.md
 
 ---
 

@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Moving Files</title>
+  <link rel="stylesheet" href="./css/style.css?v=0.2.49" />
+</head>
+<body>
+  <div class="shell">
+<nav class="nav" aria-label="Views">
+      <button type="button" class="active" data-view="summary">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><rect x="14" y="14" width="7" height="7" rx="1.4"/></svg>
+        <span data-i18n="nav.summary">Zusammenfassung</span>
+      </button>
+      <button type="button" data-view="devices">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+        <span data-i18n="nav.devices">Verbindungen</span>
+      </button>
+      <button type="button" data-view="transfers">
+        <svg viewBox="0 0 24 24"><path d="M7 7h10M7 12h10M7 17h6"/><path d="M17 15l3 3-3 3"/></svg>
+        <span data-i18n="nav.transfers">Übertragungen</span>
+      </button>
+      <button type="button" data-view="wake">
+        <svg viewBox="0 0 24 24"><path d="M12 3v4M8 8l-3-3M16 8l3-3"/><circle cx="12" cy="14" r="6"/><path d="M12 11v3l2 1"/></svg>
+        <span data-i18n="nav.wake">Wake &amp; Sync</span>
+      </button>
+      <button type="button" data-view="backup">
+        <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12h8M12 8v8"/></svg>
+        <span data-i18n="nav.backup">Backup</span>
+      </button>
+      <button type="button" data-view="schedules">
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>
+        <span data-i18n="nav.schedules">Zeitpläne</span>
+      </button>
+      <button type="button" data-view="log">
+        <svg viewBox="0 0 24 24"><path d="M5 5h14v14H5z"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>
+        <span data-i18n="nav.log">Protokolle</span>
+      </button>
+      <div class="nav-foot">
+        <div class="lang-switch" role="group" aria-label="Language">
+          <button type="button" class="lang-btn" data-lang="de">DE</button>
+          <button type="button" class="lang-btn" data-lang="en">EN</button>
+        </div>
+        <a id="foot-help" href="https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/movingfiles.md" target="_blank" rel="noopener" data-i18n="foot.help">Hilfe</a>
+        <a id="foot-privacy" href="https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/privacy/movingfiles.md" target="_blank" rel="noopener" data-i18n="foot.privacy">Datenschutz</a>
+        <a id="foot-issues" href="https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues" target="_blank" rel="noopener" data-i18n="foot.issues">Support</a>
+      </div>
+    </nav>
+
+    <main class="stage">
+      <div class="panel">
+        <section id="view-summary" class="view active">
+          <div class="status-row">
+            <div class="status-badge" id="status-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M5 12.5l5 5 9-11"/></svg>
+            </div>
+            <div>
+              <h1 id="status-title" data-i18n="status.ok">Normal</h1>
+              <p>Moving Files</p>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-head">
+              <h2 data-i18n="summary.conn">Verbindungsinformationen</h2>
+              <button class="btn ghost" type="button" data-view="devices" data-i18n="summary.manage">Geräte verwalten</button>
+            </div>
+            <div class="nas-wrap"><div class="nas" aria-hidden="true"><span class="bay"></span><span class="bay"></span><span class="bay"></span><span class="bay"></span></div></div>
+            <div class="cards" id="summary-cards"></div>
+          </div>
+        </section>
+
+        <section id="view-devices" class="view">
+          <div class="status-row page-title">
+            <div>
+              <h1 data-i18n="devices.title">Verbindungen</h1>
+              <p data-i18n="devices.lead">Dieses NAS, andere NAS-Geräte und Windows-PCs per SMB. Anmeldung einmal speichern.</p>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-head">
+              <h2 data-i18n="devices.saved">Gespeicherte Geräte</h2>
+              <button class="btn primary" type="button" id="btn-add-device" data-i18n="devices.add">Gerät hinzufügen</button>
+            </div>
+            <p class="hint" data-i18n="devices.hint">Für PCs: Freigabe und Firewall müssen erreichbar sein. Für Wake &amp; Sync zusätzlich die MAC-Adresse eintragen. Ordnerbaum speichern, während das Gerät wach ist — dann kannst du Jobs anlegen, wenn es aus ist. Bestehende Geräte über <strong>Bearbeiten</strong> ändern — nicht löschen und neu anlegen.</p>
+            <div class="list" id="device-list"></div>
+            <h2 class="add-title" id="device-form-title" data-i18n="devices.formAdd">Gerät hinzufügen</h2>
+            <form class="form" id="form-device">
+              <input type="hidden" name="deviceId" value="" />
+              <label><span data-i18n="dev.type">Typ</span>
+                <select name="type">
+                  <option value="pc" data-i18n="dev.pc">Windows-PC</option>
+                  <option value="nas" data-i18n="dev.nas">Anderes NAS</option>
+                </select>
+              </label>
+              <label><span data-i18n="dev.name">Anzeigename</span>
+                <input name="name" type="text" data-i18n-placeholder="ph.deviceName" placeholder="z. B. QNAP Wohnzimmer" autocomplete="off" />
+              </label>
+              <label><span data-i18n="dev.host">IP oder Hostname</span>
+                <input name="host" type="text" placeholder="192.168.2.50" autocomplete="off" />
+              </label>
+              <label><span data-i18n="dev.share">SMB-Freigabe</span>
+                <input name="share" type="text" placeholder="Backup" autocomplete="off" />
+              </label>
+              <div class="row">
+                <label><span data-i18n="dev.user">Benutzer</span>
+                  <input name="user" type="text" autocomplete="off" />
+                </label>
+                <label><span data-i18n="dev.password">Passwort</span>
+                  <input name="password" type="password" autocomplete="new-password" />
+                  <span class="hint field-hint" id="device-pass-hint"></span>
+                </label>
+              </div>
+              <label><span data-i18n="dev.mac">MAC für Wake-on-LAN</span>
+                <input name="mac" type="text" placeholder="aa:bb:cc:dd:ee:ff" autocomplete="off" />
+              </label>
+              <p class="hint" data-i18n="dev.macHint">Wake-Paket enthält immer die MAC. UDP-Ziele sind nur der Transport. Zweite Buchse braucht Kabel-Link — QNAP-LAN im ausgeschalteten Zustand unter Strom (Wake-on-LAN), sonst ist die Buchse „kein-Link“ und es kommt nichts raus.</p>
+              <div class="actions">
+                <button class="btn primary" type="submit" id="btn-save-device" data-i18n="btn.save">Speichern</button>
+                <button class="btn" type="button" id="btn-cancel-device" data-i18n="btn.cancel">Abbrechen</button>
+              </div>
+              <p class="hint" id="device-msg"></p>
+            </form>
+          </div>
+        </section>
+
+        <section id="view-transfers" class="view">
+          <div class="status-row page-title">
+            <div>
+              <h1 data-i18n="transfers.title">Übertragungen</h1>
+              <p data-i18n="transfers.lead">Ordner per Klick wählen — nicht den Pfad eintippen. Mehrere Quellordner sind möglich.</p>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-head">
+              <h2 id="transfer-count" data-i18n="transfers.jobs">Jobs</h2>
+            </div>
+            <div class="list" id="transfer-list"></div>
+            <h2 class="add-title" id="transfer-form-title" data-i18n="transfers.formAdd">Weiteren Job hinzufügen</h2>
+            <p class="hint" data-i18n="transfers.hint">Zuerst Gerät wählen, dann Ordner im Baum. Gespeicherte Jobs über Bearbeiten ändern. NAS-Ordner beim Installieren im Assistenten wählen (oder später App Center → Moving Files → Einstellungen). Danach App neu starten.</p>
+            <form class="form" id="form-transfer">
+              <input type="hidden" name="jobId" value="" />
+              <label><span data-i18n="field.name">Name</span>
+                <input name="name" data-i18n-placeholder="ph.jobName" placeholder="z. B. Fotos auf NAS" autocomplete="off" />
+              </label>
+              <div class="row">
+                <label><span data-i18n="field.source">Quelle</span>
+                  <select name="srcDevice"></select>
+                </label>
+                <div class="pick-field">
+                  <span data-i18n="field.srcFolder">Quellordner</span>
+                  <div class="chips" id="src-chips"></div>
+                  <button class="btn" type="button" id="btn-pick-src" data-i18n="pick.folder">Ordner wählen</button>
+                </div>
+              </div>
+              <div class="row">
+                <label><span data-i18n="field.dest">Ziel</span>
+                  <select name="dstDevice"></select>
+                </label>
+                <div class="pick-field">
+                  <span data-i18n="field.dstFolder">Zielordner</span>
+                  <div class="chips" id="dst-chips"></div>
+                  <button class="btn" type="button" id="btn-pick-dst" data-i18n="pick.folder">Ordner wählen</button>
+                </div>
+              </div>
+              <div class="row">
+                <label><span data-i18n="field.mode">Modus</span>
+                  <select name="mode">
+                    <option value="sync" data-i18n="mode.sync">Inkrementell (nur neue/geänderte Dateien)</option>
+                    <option value="copy" data-i18n="mode.copy">Kopieren (alles, in Unterordner)</option>
+                    <option value="move" data-i18n="mode.move">Verschieben</option>
+                  </select>
+                </label>
+                <label><span data-i18n="field.speed">Geschwindigkeit</span>
+                  <select name="fast">
+                    <option value="1" data-i18n="speed.full">Volle Geschwindigkeit</option>
+                    <option value="0" data-i18n="speed.slow">Schonend (weniger Last)</option>
+                  </select>
+                </label>
+              </div>
+              <p class="hint" data-i18n="transfers.incrHint">Inkrementell schreibt direkt in den gewählten Zielordner. Nimm denselben Ordner wie beim letzten Backup — nicht den übergeordneten Ordner.</p>
+              <div class="row">
+                <label><span data-i18n="field.auto">Automatisch</span>
+                  <select name="auto" id="transfer-auto">
+                    <option value="" data-i18n="auto.manual">Nur manuell</option>
+                    <option value="15" data-i18n="auto.15">alle 15 Min</option>
+                    <option value="30" data-i18n="auto.30">alle 30 Min</option>
+                    <option value="60" data-i18n="auto.60">stündlich</option>
+                    <option value="daily" data-i18n="auto.daily">täglich</option>
+                  </select>
+                </label>
+              </div>
+              <div class="row" id="wrap-auto-time" hidden>
+                <label><span data-i18n="field.start">Startzeit</span>
+                  <input type="time" name="autoTime" value="22:00" />
+                </label>
+                <p class="hint field-hint" data-i18n="transfers.timeHint">Zur gesetzten Uhrzeit starten. Ist die Quelle (PC/NAS) dann offline, wartet der Job und legt los, sobald sie erreichbar ist — nicht irgendwann am Tag.</p>
+              </div>
+              <p class="hint" id="auto-hint" data-i18n="autoHint.manual">Nur manuell: startet erst, wenn du auf „Jetzt“ drückst.</p>
+              <div class="actions">
+                <button class="btn primary" type="submit" id="btn-save-transfer" data-i18n="btn.addJob">Job hinzufügen</button>
+                <button class="btn" type="button" id="btn-cancel-transfer" data-i18n="btn.cancel">Abbrechen</button>
+              </div>
+              <p class="hint" id="transfer-msg"></p>
+            </form>
+          </div>
+        </section>
+
+        <section id="view-wake" class="view">
+          <div class="status-row page-title">
+            <div>
+              <h1 data-i18n="wake.title">Wake &amp; Sync</h1>
+              <p data-i18n="wake.lead">Beliebig viele Pläne. Ist das Ziel-NAS aus, den gespeicherten Ordnerbaum nutzen — einmal speichern, während es wach ist (Verbindungen → Ordnerbaum speichern).</p>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-head">
+              <h2 id="wake-count" data-i18n="wake.plans">Pläne</h2>
+            </div>
+            <div class="list" id="wake-list"></div>
+            <h2 class="add-title" id="wake-form-title" data-i18n="wake.formAdd">Weiteren Plan hinzufügen</h2>
+              <p class="hint" data-i18n="wake.hint">Ein Plan, beliebig viele Quellordner. Gespeicherte Pläne über Bearbeiten ändern. Ziel-NAS aus: gespeicherter Baum. Ziel ist ein Ordner.</p>
+            <form class="form" id="form-wake">
+              <input type="hidden" name="planId" value="" />
+              <label><span data-i18n="field.name">Name</span>
+                <input name="name" data-i18n-placeholder="ph.wakeName" placeholder="z. B. QNAP nachts sichern" autocomplete="off" />
+              </label>
+              <label><span data-i18n="wake.device">Zielgerät (PC oder anderes NAS)</span>
+                <select name="deviceId"></select>
+              </label>
+              <div class="row">
+                <label><span data-i18n="wake.dir">Richtung</span>
+                  <select name="direction">
+                    <option value="push" data-i18n="wake.push">Dieses NAS → Zielgerät</option>
+                    <option value="pull" data-i18n="wake.pull">Zielgerät → dieses NAS</option>
+                  </select>
+                </label>
+                <label><span data-i18n="wake.wait">Warten nach Wake</span>
+                  <select name="wait">
+                    <option value="5" data-i18n="min.5">5 Minuten</option>
+                    <option value="10" data-i18n="min.10">10 Minuten</option>
+                    <option value="20" selected data-i18n="min.20">20 Minuten</option>
+                    <option value="40" data-i18n="min.40">40 Minuten</option>
+                  </select>
+                </label>
+              </div>
+              <div class="row">
+                <div class="pick-field">
+                  <span data-i18n="wake.srcFolders">Quellordner (mehrere möglich)</span>
+                  <div class="chips" id="wake-src-chips"></div>
+                  <button class="btn" type="button" id="btn-pick-wake-src" data-i18n="pick.folder">Ordner wählen</button>
+                </div>
+                <div class="pick-field">
+                  <span data-i18n="wake.dest">Ziel</span>
+                  <div class="chips" id="wake-dst-chips"></div>
+                  <button class="btn" type="button" id="btn-pick-wake-dst" data-i18n="pick.folder">Ordner wählen</button>
+                </div>
+              </div>
+              <div class="row">
+                <label><span data-i18n="field.auto">Automatisch</span>
+                  <select name="auto" id="wake-auto">
+                    <option value="" data-i18n="auto.manual">Nur manuell</option>
+                    <option value="daily" data-i18n="auto.daily">täglich</option>
+                    <option value="weekly" data-i18n="auto.weekly">wöchentlich</option>
+                    <option value="biweekly" data-i18n="auto.biweekly">alle 2 Wochen</option>
+                    <option value="monthly" data-i18n="auto.monthly">1× im Monat</option>
+                  </select>
+                </label>
+              </div>
+              <div class="row" id="wrap-wake-auto-time" hidden>
+                <label id="wrap-wake-weekday" hidden><span data-i18n="field.weekday">Wochentag</span>
+                  <select name="autoWeekday" id="wake-weekday">
+                    <option value="1" data-i18n="day.1">Montag</option>
+                    <option value="2" data-i18n="day.2">Dienstag</option>
+                    <option value="3" data-i18n="day.3">Mittwoch</option>
+                    <option value="4" data-i18n="day.4">Donnerstag</option>
+                    <option value="5" data-i18n="day.5">Freitag</option>
+                    <option value="6" data-i18n="day.6">Samstag</option>
+                    <option value="7" data-i18n="day.7">Sonntag</option>
+                  </select>
+                </label>
+                <label><span data-i18n="field.start">Startzeit</span>
+                  <input type="time" name="autoTime" value="22:00" />
+                </label>
+                <p class="hint field-hint" data-i18n="wake.timeHint">Zur gesetzten Uhrzeit wecken und dann die Ordner synchronisieren. Ist das Gerät noch aus, wartet der Plan die eingestellte Wake-Zeit.</p>
+              </div>
+              <p class="hint" id="wake-auto-hint" data-i18n="autoHint.manual">Nur manuell: startet erst, wenn du auf „Jetzt“ drückst.</p>
+              <div class="actions">
+                <button class="btn primary" type="submit" id="btn-save-wake" data-i18n="btn.addPlan">Plan hinzufügen</button>
+                <button class="btn" type="button" id="btn-cancel-wake" data-i18n="btn.cancel">Abbrechen</button>
+                <button class="btn ok" type="button" id="btn-wol" data-i18n="wake.now">Jetzt wecken</button>
+              </div>
+              <p class="hint" id="wake-msg"></p>
+            </form>
+          </div>
+        </section>
+
+        <section id="view-backup" class="view">
+          <div class="status-row page-title">
+            <div>
+              <h1 data-i18n="backup.title">Backup</h1>
+              <p data-i18n="backup.lead">Erzeugt ein Archiv (.tar.gz) am gewählten Ziel. Zeitplan wie bei Wake: täglich, wöchentlich, alle 2 Wochen oder monatlich. Hat das Ziel eine MAC-Adresse, wird es bei Bedarf geweckt.</p>
+            </div>
+          </div>
+          <div class="section">
+            <form class="form" id="form-backup">
+              <div class="row">
+                <label><span data-i18n="backup.srcNas">Quelle (dieses NAS)</span>
+                  <select name="srcDevice"></select>
+                </label>
+                <div class="pick-field">
+                  <span data-i18n="field.srcFolder">Quellordner</span>
+                  <div class="chips" id="backup-src-chips"></div>
+                  <button class="btn" type="button" id="btn-pick-backup-src" data-i18n="pick.folder">Ordner wählen</button>
+                </div>
+              </div>
+              <div class="row">
+                <label><span data-i18n="backup.putOn">Archiv ablegen auf</span>
+                  <select name="dstDevice"></select>
+                </label>
+                <div class="pick-field">
+                  <span data-i18n="backup.dstArchives">Zielordner für Archive</span>
+                  <div class="chips" id="backup-dst-chips"></div>
+                  <button class="btn" type="button" id="btn-pick-backup-dst" data-i18n="pick.folder">Ordner wählen</button>
+                </div>
+              </div>
+              <div class="row">
+                <label><span data-i18n="backup.keep">Aufbewahrung</span>
+                  <select name="keep">
+                    <option value="7" data-i18n="keep.7">7 Archive</option>
+                    <option value="14" data-i18n="keep.14">14 Archive</option>
+                    <option value="30" data-i18n="keep.30">30 Archive</option>
+                  </select>
+                </label>
+                <label><span data-i18n="field.auto">Automatisch</span>
+                  <select name="auto" id="backup-auto">
+                    <option value="" data-i18n="auto.manual">Nur manuell</option>
+                    <option value="daily" data-i18n="auto.daily">täglich</option>
+                    <option value="weekly" data-i18n="auto.weekly">wöchentlich</option>
+                    <option value="biweekly" data-i18n="auto.biweekly">alle 2 Wochen</option>
+                    <option value="monthly" data-i18n="auto.monthly">1× im Monat</option>
+                  </select>
+                </label>
+              </div>
+              <p class="hint" id="backup-wake-hint"></p>
+              <div class="row" id="wrap-backup-auto-time" hidden>
+                <label id="wrap-backup-weekday" hidden><span data-i18n="field.weekday">Wochentag</span>
+                  <select name="autoWeekday" id="backup-weekday">
+                    <option value="1" data-i18n="day.1">Montag</option>
+                    <option value="2" data-i18n="day.2">Dienstag</option>
+                    <option value="3" data-i18n="day.3">Mittwoch</option>
+                    <option value="4" data-i18n="day.4">Donnerstag</option>
+                    <option value="5" data-i18n="day.5">Freitag</option>
+                    <option value="6" data-i18n="day.6">Samstag</option>
+                    <option value="7" data-i18n="day.7">Sonntag</option>
+                  </select>
+                </label>
+                <label><span data-i18n="field.start">Startzeit</span>
+                  <input type="time" name="autoTime" value="22:00" />
+                </label>
+                <label><span data-i18n="wake.wait">Warten nach Wake</span>
+                  <select name="wait">
+                    <option value="5" data-i18n="min.5">5 Minuten</option>
+                    <option value="10" data-i18n="min.10">10 Minuten</option>
+                    <option value="20" selected data-i18n="min.20">20 Minuten</option>
+                    <option value="40" data-i18n="min.40">40 Minuten</option>
+                  </select>
+                </label>
+                <p class="hint field-hint" data-i18n="backup.waitHint">Zur Uhrzeit sichern. Ist das Ziel aus und hat unter Verbindungen eine MAC, sendet die App ein Wecksignal und wartet bis zu dieser Zeit.</p>
+              </div>
+              <p class="hint" id="backup-auto-hint" data-i18n="autoHint.backupManual">Nur manuell: startet erst, wenn du auf „Jetzt sichern“ drückst.</p>
+              <div class="row">
+                <label class="check-line"><input type="checkbox" id="backup-protect" /> <span data-i18n="backup.protect">Archiv mit Passwort schützen</span></label>
+              </div>
+              <div class="row" id="wrap-backup-pass" hidden>
+                <label><span data-i18n="backup.pass">Passwort</span>
+                  <input type="password" id="backup-pass" autocomplete="new-password" />
+                </label>
+                <label><span data-i18n="backup.pass2">Passwort wiederholen</span>
+                  <input type="password" id="backup-pass2" autocomplete="new-password" />
+                </label>
+              </div>
+              <p class="hint" id="backup-pass-hint" data-i18n="pass.off">Ohne Häkchen bleibt das Archiv unverschlüsselt. Vergessenes Passwort heißt: Wiederherstellen unmöglich.</p>
+              <p class="hint" data-i18n="backup.keepHint">Der gewählte Ordner wird inklusive Namen gesichert. Wiederherstellen legt ihn so im Ziel ab. Jedes Sichern erzeugt ein neues Archiv mit Datum im Namen. Ältere Archive über der gewählten Anzahl werden gelöscht.</p>
+              <div class="actions">
+                <button class="btn primary" type="submit" data-i18n="backup.saveSettings">Einstellungen speichern</button>
+                <button class="btn ok" type="button" id="btn-run-backup" data-i18n="backup.now">Jetzt sichern</button>
+              </div>
+              <div id="backup-progress"></div>
+              <p class="hint" id="backup-msg"></p>
+            </form>
+            <h2 class="add-title" data-i18n="backup.restoreTitle">Archive wiederherstellen</h2>
+            <p class="hint" data-i18n="backup.restoreHint">Häkchen setzen, Zielordner auf diesem NAS wählen, dann entpacken. Es kommt genau der gesicherte Ordner an (Name plus Inhalt), nicht nur die Dateien darin. Dateien ohne Schreibrecht werden übersprungen. Ziel muss für die App beschreibbar sein (App-Einstellungen).</p>
+            <div class="list" id="backup-archive-list"></div>
+            <div class="form">
+              <div class="pick-field">
+                <span data-i18n="backup.unpack">Entpacken nach (dieses NAS)</span>
+                <div class="chips" id="backup-restore-chips"></div>
+                <button class="btn" type="button" id="btn-pick-backup-restore" data-i18n="pick.folder">Ordner wählen</button>
+              </div>
+              <div class="row">
+                <label><span data-i18n="backup.restorePass">Passwort (nur geschützte Archive)</span>
+                  <input type="password" id="restore-pass" autocomplete="off" />
+                </label>
+              </div>
+              <div class="actions">
+                <button class="btn primary" type="button" id="btn-restore-backup" data-i18n="backup.restoreBtn">Ausgewählte wiederherstellen</button>
+              </div>
+              <div id="restore-progress"></div>
+              <p class="hint" id="restore-msg"></p>
+            </div>
+          </div>
+        </section>
+
+        <section id="view-schedules" class="view">
+          <div class="status-row page-title">
+            <div>
+              <h1 data-i18n="sched.title">Zeitpläne</h1>
+              <p data-i18n="sched.lead">Tägliche Jobs starten zur Uhrzeit. Intervalle versuchen im Takt. Fehlende Quelle: warten bzw. nächster Versuch — siehe Text am Job.</p>
+            </div>
+          </div>
+          <div class="section">
+            <div class="list" id="schedule-list"></div>
+          </div>
+        </section>
+
+        <section id="view-log" class="view">
+          <div class="status-row page-title">
+            <div>
+              <h1 data-i18n="log.title">Protokolle</h1>
+              <p data-i18n="log.lead">Letzte Aktionen dieser App.</p>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-head">
+              <h2 data-i18n="log.head">Log</h2>
+              <button class="btn" type="button" id="btn-clear-log" data-i18n="log.clear">Leeren</button>
+            </div>
+            <pre class="log" id="log-box"></pre>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal" id="modal-pick" role="dialog" aria-labelledby="pick-title">
+    <div class="modal-box picker-box">
+      <h2 id="pick-title" data-i18n="pick.title">Ordner wählen</h2>
+      <p class="crumb" id="pick-crumb" data-i18n="pick.shares">Freigaben</p>
+      <p class="hint" id="pick-hint"></p>
+      <ul class="dir-list" id="pick-list"></ul>
+      <div class="actions">
+        <button class="btn" type="button" id="pick-up" data-i18n="pick.up">Zurück</button>
+        <button class="btn primary" type="button" id="pick-here" data-i18n="pick.here">Diesen Ordner</button>
+        <button class="btn ok" type="button" id="pick-checked" data-i18n="pick.checked">Ausgewählte übernehmen</button>
+        <button class="btn" type="button" id="pick-cancel" data-i18n="pick.cancel">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="consent-banner" id="consent-banner" hidden data-i18n="privacy.bannerDecline"></p>
+
+  <div class="modal" id="modal-privacy" role="dialog" aria-labelledby="privacy-title">
+    <div class="modal-box">
+      <h2 id="privacy-title" data-i18n="privacy.title">Datenschutz</h2>
+      <p data-i18n="privacy.body">Moving Files speichert SMB-Anmeldedaten und optional ein Backup-Passwort nur auf diesem NAS. Runlevel erhält keine Dateien und betreibt keine Cloud. Bitte die Datenschutzerklärung lesen, bevor du Zugangsdaten speicherst.</p>
+      <p><a id="privacy-link" href="https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/privacy/movingfiles.md" target="_blank" rel="noopener" data-i18n="privacy.read">Datenschutzerklärung</a></p>
+      <div class="actions">
+        <button class="btn primary" type="button" id="privacy-agree" data-i18n="privacy.agree">Zustimmen</button>
+        <button class="btn" type="button" id="privacy-decline" data-i18n="privacy.decline">Ablehnen</button>
+      </div>
+    </div>
+  </div>
+  <script src="./js/i18n.js?v=0.2.49"></script>
+  <script src="./js/app.js?v=0.2.49"></script>
+</body>
+</html>

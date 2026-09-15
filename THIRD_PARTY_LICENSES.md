@@ -19,8 +19,22 @@ see each application's `Dockerfile` for the full `apk` dependency set.
 | eudev | GPL-2.0 | https://github.com/eudev-project/eudev |
 | dosfstools | GPL-3.0 | https://github.com/dosfstools/dosfstools |
 
+## Moving Files (native Go app)
+
+Moving Files (`com.runlevel.movingfiles`) is a native UGOS service. It does not
+use Alpine/Python. Packaged builds may bundle **rclone** (MIT).
+Source: [apps/moving-files](apps/moving-files/).
+
+| Component | License | Project |
+| --- | --- | --- |
+| Go | BSD-3-Clause | https://go.dev |
+| github.com/hirochachacha/go-smb2 | BSD-2-Clause | https://github.com/hirochachacha/go-smb2 |
+| github.com/geoffgarside/ber | MIT | https://github.com/geoffgarside/ber |
+| golang.org/x/crypto | BSD-3-Clause | https://pkg.go.dev/golang.org/x/crypto |
+| rclone (bundled at pack time) | MIT | https://rclone.org/ |
+
 ## Application source code
 
-Runlevel application source (Python UI and logic): https://github.com/runlevel1977-del/Runlevel-UGOS-Apps
+Runlevel application source (Docker Python apps and native Moving Files): https://github.com/runlevel1977-del/Runlevel-UGOS-Apps
 
 Windows companion tool **Ugreen NAS Admin**: https://github.com/runlevel1977-del/UgreenNASAdmin

@@ -1,0 +1,6 @@
+# Build outputs
+/dist/
+/build_dir/
+*.upk
+*.tar.gz
+*.zip

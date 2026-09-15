@@ -1,0 +1,89 @@
+spec_version: "2.1"
+app_id: com.runlevel.movingfiles
+version: 0.2.0
+support_arch:
+  - amd64
+  - arm64
+product_series:
+  - nasync
+is_docker_app: false
+only_admin: true
+allow_add_access_path: true
+start_cmd: bin/movingfiles_serv --port=21010
+port: 21010
+proxy_path: api
+open_type: inner
+supports:
+  - app
+  - pc
+tag_types:
+  - utility
+  - backup
+depend_fw_version: 1.13.0.0000
+depend_docker_version: ""
+license_agreement_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/EULA.md"
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/LICENSE"
+source_code_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/THIRD_PARTY_LICENSES.md"
+technical_support_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues"
+privacy_policy_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/privacy/movingfiles.md"
+parameters:
+  - key: NAS_FOLDER
+    type: path
+    required: true
+    changeable: true
+    multi: true
+    i18n:
+      en-US:
+        name: NAS folders (Volume 1)
+        description: Folders on Volume 1 (e.g. where PC copies land). Change later under Settings. Restart the app after a change.
+      de-DE:
+        name: NAS-Ordner (Volume 1)
+        description: Ordner auf Volume 1 (z. B. HierLandetAlles, wo die Daten vom PC landen). Später unter Einstellungen änderbar. Nach Änderung App neu starten.
+      zh-CN:
+        name: NAS 文件夹（卷 1）
+        description: 卷 1 上的文件夹（例如电脑拷贝的目标）。之后可在设置中更改。更改后请重启应用。
+  - key: HDD_FOLDER
+    type: path
+    required: false
+    changeable: true
+    multi: true
+    i18n:
+      en-US:
+        name: Volume 2 / HDD
+        description: Folders on Volume 2 (HDD) for the second copy. Add the HDD share here. Restart the app after a change.
+      de-DE:
+        name: Volume 2 / HDD
+        description: Ordner auf Volume 2 (HDD) für die zweite Sicherung. Hier den HDD-Ordner dazunehmen. Nach Änderung App neu starten.
+      zh-CN:
+        name: 卷 2 / HDD
+        description: 卷 2（HDD）上的文件夹，用于第二份拷贝。更改后请重启应用。
+i18n:
+  en-US:
+    name: Moving Files
+    description: "Copy and move folders between this NAS, Windows PCs and other NAS devices over SMB. Run several independent jobs, wake a sleeping PC or NAS before a copy, and create dated tar.gz backup archives with optional password protection. German and English in the app."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/movingfiles.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  de-DE:
+    name: Moving Files
+    description: "Ordner zwischen diesem NAS, Windows-PCs und anderen NAS-Geräten per SMB kopieren oder verschieben. Mehrere unabhängige Jobs, Wake-on-LAN vor der Kopie, und datierte tar.gz-Archive mit optionalem Passwort. Oberfläche Deutsch und Englisch."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/movingfiles.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  zh-CN:
+    name: Moving Files
+    description: "通过 SMB 在本 NAS、Windows 电脑和其他 NAS 之间复制或移动文件夹。支持多个独立任务、拷贝前网络唤醒，以及带可选密码的 tar.gz 备份归档。应用内界面为德语和英语。"
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/movingfiles.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"

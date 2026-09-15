@@ -1,14 +1,15 @@
-# Runlevel UGOS Docker Apps — End User License Agreement
+# Runlevel UGOS Apps — End User License Agreement
 
 **Publisher:** Runlevel (Ivica Kampic)  
 **Contact:** runlevel1977@posteo.de  
-**Last updated:** 2026-05-19
+**Last updated:** 2026-09-14
 
 ## 1. Scope
 
-This agreement applies to the Runlevel Docker applications distributed for
-UGREEN NAS (UGOS Pro), including Stats Hub, Transfer Hub, Backup Verifier,
-Wake & Sync, Security Hub, and Lock & Key.
+This agreement applies to the Runlevel applications distributed for
+UGREEN NAS (UGOS Pro), including the Docker applications Stats Hub, Transfer Hub,
+Backup Verifier, Wake & Sync, Security Hub, and Lock & Key, and the native
+application Moving Files.
 
 ## 2. License grant
 
