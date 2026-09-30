@@ -4,10 +4,29 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_SECRET_RES = (
+    re.compile(r"(?i)(password\s*[=:]\s*)([^\s,;]+)"),
+    re.compile(r"(?i)(pass\s*[=:]\s*)([^\s,;]+)"),
+    re.compile(r"(?i)(token\s*[=:]\s*)([^\s,;]+)"),
+    re.compile(r"(?i)(-U\s+)([^%\s]+)%(\S+)"),
+    re.compile(r"enc:v1:[A-Za-z0-9+/=._-]+"),
+)
+
+
+def redact_secrets(text: str) -> str:
+    out = str(text or "")
+    out = _SECRET_RES[0].sub(r"\1***", out)
+    out = _SECRET_RES[1].sub(r"\1***", out)
+    out = _SECRET_RES[2].sub(r"\1***", out)
+    out = _SECRET_RES[3].sub(r"\1\2%***", out)
+    out = _SECRET_RES[4].sub("enc:v1:***", out)
+    return out
 
 DATA_DIR = Path(os.environ.get("TRANSFER_HUB_DATA", "/data"))
 PROFILES_FILE = DATA_DIR / "profiles.json"
@@ -37,14 +56,14 @@ def append_log(line: str) -> None:
     _ensure_data_dir()
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     with LOG_FILE.open("a", encoding="utf-8") as f:
-        f.write(f"[{ts}] {line}\n")
+        f.write(f"[{ts}] {redact_secrets(line)}\n")
 
 
 def read_log_tail(max_lines: int = 80) -> str:
     if not LOG_FILE.is_file():
         return ""
     lines = LOG_FILE.read_text(encoding="utf-8", errors="replace").splitlines()
-    return "\n".join(lines[-max_lines:])
+    return redact_secrets("\n".join(lines[-max_lines:]))
 
 
 def new_profile_id() -> str:
@@ -53,9 +72,13 @@ def new_profile_id() -> str:
 
 def _ep_key(ep: Any) -> str:
     if isinstance(ep, dict):
+        from devices import endpoint_path_list
+
+        paths = endpoint_path_list(ep)
+        path_part = "|".join(paths) if paths else (ep.get("path") or "")
         return (
             f"{ep.get('device_id')}|{ep.get('volume') or ''}|"
-            f"{ep.get('share')}|{ep.get('path')}"
+            f"{ep.get('share')}|{path_part}"
         )
     return str(ep or "")
 

@@ -1,0 +1,218 @@
+spec_version: "2.1"
+app_id: com.runlevel.wakesync
+version: 0.1.45
+support_arch:
+  - amd64
+  - arm64
+is_docker_app: true
+only_admin: true
+port: 29120
+open_type: tab
+supports:
+  - app
+  - pc
+tag_types:
+  - backup
+depend_fw_version: 1.13.0.0000
+depend_docker_version: 1.7.0.0000
+license_agreement_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/EULA.md"
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/LICENSE"
+source_code_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/THIRD_PARTY_LICENSES.md"
+technical_support_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues"
+privacy_policy_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/privacy/wakesync.md"
+
+
+
+
+parameters:
+  - key: NAS_DATA_ROOT
+    type: path
+    required: true
+    changeable: true
+    i18n:
+      en-US:
+        name: UGOS folder shortcut
+        description: "Subfolder for source picker (Volume 1/2 separate in app)"
+      de-DE:
+        name: UGOS-Ordner
+        description: "Kurzweg für Quell-Ordner (Volume 1/2 in der App)"
+      zh-CN:
+        name: UGOS 文件夹
+        description: "供应用访问的用户指定文件夹快捷方式"
+      fr-FR:
+        name: Raccourci dossier UGOS
+        description: "Sous-dossier pour le sélecteur source (Volume 1/2 séparés dans l’app)"
+      es-ES:
+        name: Acceso directo carpeta UGOS
+        description: "Subcarpeta para el selector de origen (Volumen 1/2 separados en la app)"
+      it-IT:
+        name: Scorciatoia cartella UGOS
+        description: "Sottocartella per il selettore origine (Volume 1/2 separati nell’app)"
+      pl-PL:
+        name: Skrót folderu UGOS
+        description: "Podfolder do wyboru źródła (Volume 1/2 osobno w aplikacji)"
+      ru-RU:
+        name: Ярлык папки UGOS
+        description: "Подпапка для выбора источника (Volume 1/2 отдельно в приложении)"
+      tr-TR:
+        name: UGOS klasör kısayolu
+        description: "Kaynak seçici için alt klasör (Volume 1/2 uygulamada ayrı)"
+      hr-HR:
+        name: Prečac UGOS mape
+        description: "Podmapa za odabir izvora (Volume 1/2 odvojeno u aplikaciji)"
+  - key: WOL_BROADCAST
+    type: string
+    required: false
+    changeable: true
+    i18n:
+      en-US:
+        name: WoL broadcast
+        description: "Subnet broadcast for magic packet, e.g. 10.0.0.255 (direct link) or 192.168.2.255 (via router). Not the QNAP IP."
+      de-DE:
+        name: WoL-Broadcast
+        description: "Subnetz-Broadcast fürs Aufwecken, z. B. 10.0.0.255 (Direktlink) oder 192.168.2.255 (Router). Nicht die QNAP-IP."
+      zh-CN:
+        name: WoL 广播地址
+        description: "魔术包广播地址，例如 192.168.2.255"
+      fr-FR:
+        name: Broadcast WoL
+        description: "Broadcast de sous-réseau pour le magic packet, p. ex. 192.168.2.255 (pas l’IP du NAS cible)."
+      es-ES:
+        name: Broadcast WoL
+        description: "Broadcast de subred para el magic packet, p. ej. 192.168.2.255 (no la IP del NAS destino)."
+      it-IT:
+        name: Broadcast WoL
+        description: "Broadcast di sottorete per il magic packet, es. 192.168.2.255 (non l’IP del NAS di destinazione)."
+      pl-PL:
+        name: Broadcast WoL
+        description: "Broadcast podsieci dla magic packet, np. 192.168.2.255 (nie IP docelowego NAS)."
+      ru-RU:
+        name: Broadcast WoL
+        description: "Широковещательный адрес для magic packet, напр. 192.168.2.255 (не IP целевого NAS)."
+      tr-TR:
+        name: WoL yayın adresi
+        description: "Magic packet için alt ağ yayını, örn. 192.168.2.255 (hedef NAS IP’si değil)."
+      hr-HR:
+        name: WoL broadcast
+        description: "Broadcast podmreže za magic packet, npr. 192.168.2.255 (ne IP odredišnog NAS-a)."
+  - key: WOL_SOURCE_IP
+    type: string
+    required: false
+    changeable: true
+    i18n:
+      en-US:
+        name: WoL source IP
+        description: "IP on the link used to wake QNAP, e.g. 10.0.0.2 (direct cable). Comma for multiple: 10.0.0.2,192.168.2.5"
+      de-DE:
+        name: WoL Quell-IP
+        description: "IP am Link zum QNAP, z. B. 10.0.0.2 (Direktkabel). Mehrere mit Komma: 10.0.0.2,192.168.2.5"
+      zh-CN:
+        name: WoL 源 IP
+        description: "发送唤醒包所用的本机 IP"
+      fr-FR:
+        name: IP source WoL
+        description: "IP du lien utilisé pour réveiller la cible, p. ex. 10.0.0.2. Plusieurs séparées par des virgules."
+      es-ES:
+        name: IP origen WoL
+        description: "IP del enlace usado para despertar el destino, p. ej. 10.0.0.2. Varias separadas por comas."
+      it-IT:
+        name: IP origine WoL
+        description: "IP del collegamento usato per svegliare la destinazione, es. 10.0.0.2. Più IP separate da virgola."
+      pl-PL:
+        name: IP źródłowe WoL
+        description: "IP łącza używanego do budzenia celu, np. 10.0.0.2. Wiele po przecinku."
+      ru-RU:
+        name: Исходный IP WoL
+        description: "IP канала для пробуждения цели, напр. 10.0.0.2. Несколько через запятую."
+      tr-TR:
+        name: WoL kaynak IP
+        description: "Hedefi uyandırmak için kullanılan bağlantı IP’si, örn. 10.0.0.2. Birden fazla: virgülle."
+      hr-HR:
+        name: WoL izvorni IP
+        description: "IP veze za buđenje cilja, npr. 10.0.0.2. Više adresa odvojenih zarezom."
+i18n:
+  en-US:
+    name: Wake & Sync
+    description: "Wake a second NAS or PC on a schedule via Wake-on-LAN, wait until SMB is reachable, then run a one-way incremental sync. Optional Telegram and email alerts. Companion Windows app: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/wakesync.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  de-DE:
+    name: Wake & Sync
+    description: "Zweites NAS oder PC per Wake-on-LAN zeitgesteuert aufwecken, auf SMB warten und einseitig inkrementell synchronisieren. Optional Telegram- und E-Mail-Benachrichtigungen. Windows-Begleiter: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/wakesync.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  zh-CN:
+    name: Wake & Sync
+    description: "按计划通过网络唤醒（Wake-on-LAN）第二台 NAS 或电脑，等待 SMB 可用后执行单向增量同步；支持可选的 Telegram 与电子邮件提醒。配套 Windows 应用：Ugreen NAS Admin。"
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/wakesync.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  fr-FR:
+    name: Wake & Sync
+    description: "Réveillez un second NAS ou PC selon un planning via Wake-on-LAN, attendez SMB, puis lancez une sync incrémentale unidirectionnelle. Alertes Telegram/e-mail optionnelles. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/wakesync.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  es-ES:
+    name: Wake & Sync
+    description: "Despierta un segundo NAS o PC según horario con Wake-on-LAN, espera a SMB y ejecuta una sync incremental unidireccional. Alertas Telegram/correo opcionales. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/wakesync.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  it-IT:
+    name: Wake & Sync
+    description: "Sveglia un secondo NAS o PC in base a una pianificazione via Wake-on-LAN, attendi SMB ed esegui una sync incrementale unidirezionale. Avvisi Telegram/e-mail opzionali. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/wakesync.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  pl-PL:
+    name: Wake & Sync
+    description: "Budzi drugi NAS lub PC według harmonogramu przez Wake-on-LAN, czeka na SMB i uruchamia jednokierunkową synchronizację przyrostową. Opcjonalne alerty Telegram/e-mail. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/wakesync.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  ru-RU:
+    name: Wake & Sync
+    description: "По расписанию будит второй NAS или ПК через Wake-on-LAN, ждёт SMB и запускает одностороннюю инкрементальную синхронизацию. Опциональные оповещения Telegram/e-mail. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/wakesync.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  tr-TR:
+    name: Wake & Sync
+    description: "Zamanlamayla ikinci bir NAS veya PC’yi Wake-on-LAN ile uyandırır, SMB hazır olunca tek yönlü artımlı senkron çalıştırır. İsteğe bağlı Telegram/e-posta uyarıları. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/wakesync.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  hr-HR:
+    name: Wake & Sync
+    description: "Po rasporedu budi drugi NAS ili PC putem Wake-on-LAN, čeka SMB pa pokreće jednosmjernu inkrementalnu sinkronizaciju. Opcionalna Telegram/e-mail upozorenja. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/wakesync.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"

@@ -7,6 +7,7 @@ import os
 import threading
 from typing import Any
 
+from secret_box import decrypt_secret, encrypt_secret
 from store import DATA_DIR, append_log
 
 CONFIG_FILE = DATA_DIR / "settings.json"
@@ -49,6 +50,30 @@ def _env_bool(name: str) -> bool | None:
     return raw in ("1", "true", "yes", "on")
 
 
+def _resolve_ugos_host(raw_host: str) -> str:
+    """Map 127.0.0.1/localhost to the NAS when running in Docker bridge."""
+    host = (raw_host or "").strip()
+    use_local = os.environ.get("UGOS_API_USE_LOCALHOST", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    if host and host not in ("127.0.0.1", "localhost"):
+        return host
+    if use_local:
+        return host or "127.0.0.1"
+    env_host = os.environ.get("UGOS_API_HOST", "").strip()
+    if env_host:
+        return env_host
+    try:
+        from ugos_support import default_ugos_host
+
+        return default_ugos_host() or "172.17.0.1"
+    except Exception:
+        return "172.17.0.1"
+
+
 def _normalize_ugos(data: dict[str, Any]) -> dict[str, Any]:
     try:
         port = int(data.get("port", DEFAULT_UGOS_PORT))
@@ -57,10 +82,10 @@ def _normalize_ugos(data: dict[str, Any]) -> dict[str, Any]:
     port = max(1, min(65535, port))
     return {
         "enabled": bool(data.get("enabled", True)),
-        "host": str(data.get("host") or DEFAULT_UGOS_HOST).strip() or DEFAULT_UGOS_HOST,
+        "host": _resolve_ugos_host(str(data.get("host") or "")),
         "port": port,
         "username": str(data.get("username") or "").strip(),
-        "password": str(data.get("password") or ""),
+        "password": decrypt_secret(DATA_DIR, str(data.get("password") or "")),
         "use_https": bool(data.get("use_https", True)),
         "verify_ssl": bool(data.get("verify_ssl", False)),
     }
@@ -68,14 +93,10 @@ def _normalize_ugos(data: dict[str, Any]) -> dict[str, Any]:
 
 def _defaults_ugos_from_env() -> dict[str, Any]:
     user = os.environ.get("UGOS_API_USER", "").strip()
-    pw = os.environ.get("UGOS_API_PASSWORD", "")
     eb = _env_bool("UGOS_API_ENABLED")
-    enabled = bool(user and pw)
-    if eb is not None:
-        enabled = eb and bool(user and pw)
     data: dict[str, Any] = {
-        "enabled": enabled,
-        "host": DEFAULT_UGOS_HOST,
+        "enabled": False,
+        "host": _resolve_ugos_host(""),
         "port": DEFAULT_UGOS_PORT,
         "username": "",
         "password": "",
@@ -93,10 +114,11 @@ def _defaults_ugos_from_env() -> dict[str, Any]:
             pass
     if user:
         data["username"] = user
-    if pw:
-        data["password"] = pw
-    if not (data["username"] and data["password"]):
-        data["enabled"] = False
+    # Do not seed password from environment (plaintext env is a review finding).
+    if data["username"] and data["password"]:
+        data["enabled"] = True
+    if eb is not None:
+        data["enabled"] = bool(eb) and bool(data["username"] and data["password"])
     https = _env_bool("UGOS_API_HTTPS")
     if https is not None:
         data["use_https"] = https
@@ -158,9 +180,8 @@ def load_ugos_api_settings() -> dict[str, Any]:
     return dict(load_settings().get("ugos_api") or _defaults_ugos_from_env())
 
 
-def settings_for_api() -> dict[str, Any]:
-    """Public settings view (no password)."""
-    cur = load_settings()
+def _public_from_cur(cur: dict[str, Any]) -> dict[str, Any]:
+    """Public settings view (no password). Caller may already hold ``_lock``."""
     ugos = dict(cur.get("ugos_api") or {})
     pw = str(ugos.get("password") or "")
     ugos_public = {k: v for k, v in ugos.items() if k != "password"}
@@ -170,6 +191,11 @@ def settings_for_api() -> dict[str, Any]:
         "disk_skip_standby": cur["disk_skip_standby"],
         "ugos_api": ugos_public,
     }
+
+
+def settings_for_api() -> dict[str, Any]:
+    """Public settings view (no password)."""
+    return _public_from_cur(load_settings())
 
 
 def save_settings(updates: dict[str, Any]) -> dict[str, Any]:
@@ -206,18 +232,28 @@ def save_settings(updates: dict[str, Any]) -> dict[str, Any]:
             if "verify_ssl" in patch:
                 ug["verify_ssl"] = bool(patch["verify_ssl"])
             cur["ugos_api"] = _normalize_ugos(ug)
+            saved_ug = cur["ugos_api"]
+            if saved_ug.get("enabled"):
+                if not str(saved_ug.get("username") or "").strip():
+                    raise ValueError("username_required")
+                if not str(saved_ug.get("password") or "").strip():
+                    raise ValueError("password_required")
         DATA_DIR.mkdir(parents=True, exist_ok=True)
+        disk = json.loads(json.dumps(cur))
+        ug_disk = disk.get("ugos_api") or {}
+        if ug_disk.get("password"):
+            ug_disk["password"] = encrypt_secret(DATA_DIR, str(ug_disk["password"]))
+            disk["ugos_api"] = ug_disk
         CONFIG_FILE.write_text(
-            json.dumps(cur, indent=2) + "\n", encoding="utf-8"
+            json.dumps(disk, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
         ug = cur.get("ugos_api") or {}
         append_log(
             f"Settings: disk poll {cur['disk_poll_interval_sec']}s, "
             f"skip standby={cur['disk_skip_standby']}, "
-            f"UGOS API={'on' if ug.get('enabled') else 'off'} "
-            f"{ug.get('host')}:{ug.get('port')}"
+            f"UGOS API={'on' if ug.get('enabled') else 'off'}"
         )
-        return settings_for_api()
+        return _public_from_cur(cur)
 
 
 def get_disk_poll_interval_sec() -> int:

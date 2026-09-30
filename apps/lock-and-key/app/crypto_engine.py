@@ -78,9 +78,11 @@ def _derive_wrap_key(passphrase: str, salt: bytes) -> bytes:
 
 
 def wrap_key_file(inner: dict[str, Any], passphrase: str) -> dict[str, Any]:
+    from i18n import I18nError
+
     phrase = (passphrase or "").strip()
     if len(phrase) < 8:
-        raise ValueError("key password must be at least 8 characters")
+        raise I18nError("err.key_pw_short")
     salt = os.urandom(16)
     wrap_key = _derive_wrap_key(phrase, salt)
     plain = json.dumps(inner, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
@@ -101,24 +103,26 @@ def wrap_key_file(inner: dict[str, Any], passphrase: str) -> dict[str, Any]:
 
 
 def unwrap_key_file(outer: dict[str, Any], passphrase: str) -> dict[str, Any]:
+    from i18n import I18nError
+
     phrase = (passphrase or "").strip()
     if not phrase:
-        raise ValueError("key file password required")
+        raise I18nError("err.key_pw_required")
     if outer.get("magic") != MAGIC_WRAP:
-        raise ValueError("not a password-protected key file")
+        raise I18nError("err.not_pw_key")
     try:
         salt = base64.b64decode((outer.get("salt_b64") or "").strip())
         blob = base64.b64decode((outer.get("ciphertext_b64") or "").strip())
     except Exception as exc:
-        raise ValueError("invalid wrapped key file") from exc
+        raise I18nError("err.invalid_key_file") from exc
     wrap_key = _derive_wrap_key(phrase, salt)
     try:
         plain = decrypt_bytes(wrap_key, blob)
         inner = json.loads(plain.decode("utf-8"))
     except Exception as exc:
-        raise ValueError("wrong key file password") from exc
+        raise I18nError("err.wrong_key_pw") from exc
     if inner.get("magic") != MAGIC:
-        raise ValueError("invalid inner key file")
+        raise I18nError("err.invalid_key_file")
     return inner
 
 
@@ -133,27 +137,29 @@ def serialize_key_file(inner: dict[str, Any], passphrase: str = "") -> bytes:
 
 
 def parse_key_payload(raw: bytes | str, passphrase: str = "") -> tuple[bytes, dict[str, Any]]:
+    from i18n import I18nError
+
     if isinstance(raw, bytes):
         text = raw.decode("utf-8", errors="replace")
     else:
         text = raw
     data = json.loads(text)
     if not isinstance(data, dict):
-        raise ValueError("invalid key file")
+        raise I18nError("err.invalid_key_file")
     if is_wrapped_key_file(data):
         data = unwrap_key_file(data, passphrase)
     if data.get("magic") != MAGIC:
-        raise ValueError("invalid key file magic")
+        raise I18nError("err.invalid_key_file")
     vault_id = (data.get("vault_id") or "").strip()
     if not vault_id:
-        raise ValueError("vault_id missing in key file")
+        raise I18nError("err.invalid_key_file")
     key_b64 = (data.get("key_b64") or "").strip()
     try:
         key = base64.b64decode(key_b64)
     except Exception as exc:
-        raise ValueError("invalid key_b64") from exc
+        raise I18nError("err.invalid_key_file") from exc
     if len(key) != KEY_SIZE:
-        raise ValueError("invalid key length")
+        raise I18nError("err.invalid_key_file")
     return key, data
 
 
@@ -311,7 +317,9 @@ def seal_folder(
         key=lambda p: str(p.relative_to(folder)).replace("\\", "/").casefold(),
     )
     if not sources:
-        raise ValueError("no files to seal")
+        from i18n import I18nError
+
+        raise I18nError("err.no_files_to_seal")
     files_manifest: dict[str, dict[str, Any]] = {}
     staged_paths: list[Path] = []
     staged_pairs: list[tuple[Path, Path, str]] = []
@@ -392,7 +400,9 @@ def unlock_folder(folder: Path, key: bytes, progress_cb=None) -> dict[str, Any]:
             legacy = False
     enc_files = iter_encrypted(folder)
     if not enc_files:
-        raise ValueError("no encrypted files")
+        from i18n import I18nError
+
+        raise I18nError("err.no_encrypted_files")
     count = 0
     staged_paths: list[Path] = []
     staged_pairs: list[tuple[Path, Path, Path, str]] = []

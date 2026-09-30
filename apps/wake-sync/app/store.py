@@ -3,10 +3,29 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_SECRET_RES = (
+    re.compile(r"(?i)(password\s*[=:]\s*)([^\s,;]+)"),
+    re.compile(r"(?i)(pass\s*[=:]\s*)([^\s,;]+)"),
+    re.compile(r"(?i)(token\s*[=:]\s*)([^\s,;]+)"),
+    re.compile(r"(?i)(-U\s+)([^%\s]+)%(\S+)"),
+    re.compile(r"enc:v1:[A-Za-z0-9+/=._-]+"),
+)
+
+
+def redact_secrets(text: str) -> str:
+    out = str(text or "")
+    out = _SECRET_RES[0].sub(r"\1***", out)
+    out = _SECRET_RES[1].sub(r"\1***", out)
+    out = _SECRET_RES[2].sub(r"\1***", out)
+    out = _SECRET_RES[3].sub(r"\1\2%***", out)
+    out = _SECRET_RES[4].sub("enc:v1:***", out)
+    return out
 
 DATA_DIR = Path(os.environ.get("WAKE_SYNC_DATA", "/data"))
 PLANS_FILE = DATA_DIR / "plans.json"
@@ -74,11 +93,11 @@ def append_log(line: str) -> None:
     _ensure_data_dir()
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     with LOG_FILE.open("a", encoding="utf-8") as f:
-        f.write(f"[{ts}] {line}\n")
+        f.write(f"[{ts}] {redact_secrets(line)}\n")
 
 
 def read_log_tail(max_lines: int = 120) -> str:
     if not LOG_FILE.is_file():
         return ""
     lines = LOG_FILE.read_text(encoding="utf-8", errors="replace").splitlines()
-    return "\n".join(lines[-max_lines:])
+    return redact_secrets("\n".join(lines[-max_lines:]))

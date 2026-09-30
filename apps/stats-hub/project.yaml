@@ -1,0 +1,148 @@
+﻿spec_version: "2.2"
+app_id: com.runlevel.statshub
+version: 0.2.56
+support_arch:
+  - amd64
+  - arm64
+is_docker_app: true
+only_admin: true
+port: 29125
+open_type: tab
+supports:
+  - app
+  - pc
+tag_types:
+  - utility
+depend_fw_version: 1.13.0.0000
+depend_docker_version: 1.7.0.0000
+license_agreement_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/EULA.md"
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/LICENSE"
+source_code_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/THIRD_PARTY_LICENSES.md"
+technical_support_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues"
+privacy_policy_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/privacy/statshub.md"
+
+
+
+
+parameters:
+  - key: DATA_PATH
+    type: path
+    required: true
+    changeable: true
+    i18n:
+      en-US:
+        name: Data directory
+        description: "App log (e.g. /volume1/docker/stats-hub/data)"
+      de-DE:
+        name: Datenverzeichnis
+        description: "App-Log (z. B. /volume1/docker/stats-hub/data)"
+      zh-CN:
+        name: 数据目录
+        description: "应用数据目录，例如 /volume1/docker/stats-hub/data"
+      fr-FR:
+        name: Répertoire de données
+        description: "Journal de l’app (p. ex. /volume1/docker/stats-hub/data)"
+      es-ES:
+        name: Directorio de datos
+        description: "Registro de la app (p. ej. /volume1/docker/stats-hub/data)"
+      it-IT:
+        name: Directory dati
+        description: "Log dell’app (es. /volume1/docker/stats-hub/data)"
+      pl-PL:
+        name: Katalog danych
+        description: "Log aplikacji (np. /volume1/docker/stats-hub/data)"
+      ru-RU:
+        name: Каталог данных
+        description: "Журнал приложения (напр. /volume1/docker/stats-hub/data)"
+      tr-TR:
+        name: Veri dizini
+        description: "Uygulama günlüğü (örn. /volume1/docker/stats-hub/data)"
+      hr-HR:
+        name: Podatkovni direktorij
+        description: "Dnevnik aplikacije (npr. /volume1/docker/stats-hub/data)"
+i18n:
+  en-US:
+    name: Stats Hub
+    description: "Live NAS stats dashboard for CPU, memory, storage pools, disks and network, designed for UGREEN UGOS with clear status labels. Lightweight companion view for operators. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/statshub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  de-DE:
+    name: Stats Hub
+    description: "Live-Dashboard für CPU, Speicher, Pools, Festplatten und Netzwerk auf UGREEN UGOS mit klaren Statuslabels. Leichte Operator-Ansicht. Windows-Begleiter: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/statshub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  zh-CN:
+    name: Stats Hub
+    description: "面向绿联 UGOS 的实时状态面板，展示 CPU、内存、存储池、硬盘与网络等信息，并提供清晰的状态标识，便于日常运维查看以及快速排查问题。配套 Windows 应用：Ugreen NAS Admin。"
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/statshub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  fr-FR:
+    name: Stats Hub
+    description: "Tableau de bord live pour CPU, mémoire, pools de stockage, disques et réseau sur UGREEN UGOS, avec libellés d’état clairs. Vue légère pour les opérateurs. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/statshub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  es-ES:
+    name: Stats Hub
+    description: "Panel en vivo de CPU, memoria, pools de almacenamiento, discos y red en UGREEN UGOS, con etiquetas de estado claras. Vista ligera para operadores. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/statshub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  it-IT:
+    name: Stats Hub
+    description: "Dashboard live per CPU, memoria, pool di storage, dischi e rete su UGREEN UGOS, con etichette di stato chiare. Vista leggera per gli operatori. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/statshub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  pl-PL:
+    name: Stats Hub
+    description: "Pulpit na żywo dla CPU, pamięci, puli pamięci, dysków i sieci na UGREEN UGOS z czytelnymi etykietami statusu. Lekki widok dla operatorów. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/statshub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  ru-RU:
+    name: Stats Hub
+    description: "Живая панель CPU, памяти, пулов хранения, дисков и сети для UGREEN UGOS с понятными метками статуса. Лёгкий вид для операторов. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/statshub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  tr-TR:
+    name: Stats Hub
+    description: "UGREEN UGOS için CPU, bellek, depolama havuzları, diskler ve ağ canlı panosu; net durum etiketleriyle. Operatörler için hafif görünüm. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/statshub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  hr-HR:
+    name: Stats Hub
+    description: "Živa nadzorna ploča za CPU, memoriju, spremišne poolove, diskove i mrežu na UGREEN UGOS s jasnim statusnim oznakama. Lagani prikaz za operatere. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/statshub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"

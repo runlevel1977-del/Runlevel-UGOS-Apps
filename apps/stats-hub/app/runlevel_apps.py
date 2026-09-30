@@ -8,11 +8,12 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from runlevel_discover import list_runlevel_app_specs
+from runlevel_discover import list_runlevel_app_specs, probe_host
 
 
 def _http_json(port: int, path: str, timeout: float = 2.5) -> tuple[bool, Any]:
-    url = f"http://127.0.0.1:{port}{path}"
+    host = probe_host()
+    url = f"http://{host}:{port}{path}"
     try:
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -221,6 +222,7 @@ def collect_runlevel_apps() -> list[dict[str, Any]]:
             "id": spec["id"],
             "name": spec["name"],
             "port": port,
+            "icon_url": str(spec.get("icon_url") or ""),
             "online": False,
             "version": "",
             "summary": "",
@@ -233,16 +235,10 @@ def collect_runlevel_apps() -> list[dict[str, Any]]:
         ok_s = False
         payload: Any = None
         if is_self:
-            try:
-                from monitor import snapshot as _local_snapshot
-
-                snap = _local_snapshot()
-                ok_h = True
-                health = {"version": os.environ.get("STATS_HUB_VERSION", "")}
-                ok_s = True
-                payload = {"ok": True, "snapshot": snap}
-            except Exception:
-                ok_h = False
+            ok_h = True
+            health = {"version": os.environ.get("STATS_HUB_VERSION", "")}
+            ok_s = True
+            payload = {"ok": True, "snapshot": {"ok": True}}
         else:
             ok_h, health = _http_json(port, "/health")
             if ok_h:

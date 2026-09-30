@@ -6,11 +6,12 @@ RUN apk add --no-cache python3 py3-pip py3-flask bash tzdata util-linux eudev do
 WORKDIR /app
 COPY app/ /app/
 RUN python3 -m compileall -q /app
-ENV RUNLEVEL_APPS_REPO=https://github.com/runlevel1977-del/Runlevel-UGOS-Apps \
+ENV LANG=C.UTF-8 PYTHONIOENCODING=utf-8 \
+    RUNLEVEL_APPS_REPO=https://github.com/runlevel1977-del/Runlevel-UGOS-Apps \
     RUNLEVEL_PRIVACY_SLUG=lockandkey \
-    RUNLEVEL_CREDENTIAL_CONSENT=0
+    RUNLEVEL_CREDENTIAL_CONSENT=1
 ENV LOCK_KEY_DATA=/data \
-    LOCK_KEY_VERSION=0.1.25 \
+    LOCK_KEY_VERSION=0.1.32 \
     TZ=Europe/Berlin
 EXPOSE 8080
 VOLUME ["/data"]

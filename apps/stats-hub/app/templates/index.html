@@ -39,7 +39,8 @@
     .app-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:.75rem; }
     .app-card { background:#0a0e12; border:1px solid var(--border); border-radius:8px; padding:.75rem; }
     .app-card.offline { opacity:.7; }
-    .app-card h3 { margin:0 0 .35rem; font-size:.95rem; }
+    .app-card h3 { margin:0 0 .35rem; font-size:.95rem; display:flex; align-items:center; gap:.5rem; }
+    .app-card .app-icon { width:28px; height:28px; border-radius:6px; flex:0 0 28px; object-fit:contain; background:#111820; }
     .app-card a { color:var(--accent2); font-size:.8rem; text-decoration:none; }
     .app-card a:hover { text-decoration:underline; }
     .tag-rl { font-size:.65rem; background:#1e3a5f; color:#93c5fd; padding:.1rem .3rem; border-radius:3px; margin-left:.25rem; }
@@ -53,8 +54,11 @@
     pre { background:#0a0e12; padding:.75rem; overflow:auto; max-height:140px; font-size:.75rem; border-radius:6px; }
     .page-header { display:flex; flex-wrap:wrap; justify-content:space-between; gap:1rem; margin-bottom:.75rem; }
     .hint { font-size:.85rem; color:var(--muted); margin:0; }
-    .lang-switch button { background:#2a3545; color:var(--muted); margin-left:.25rem; min-width:2.5rem; }
-    .lang-switch button.active { background:var(--accent2); color:#fff; }
+    .lang-switch { display:flex; align-items:center; gap:.5rem; flex-shrink:0; }
+    .lang-switch select {
+      background:#0a0e12; color:var(--text); border:1px solid var(--border);
+      border-radius:6px; padding:.35rem .55rem; font-size:.85rem; min-width:7.5rem;
+    }
     .spark { height:36px; display:flex; align-items:flex-end; gap:1px; margin-top:.35rem; }
     .spark i { flex:1; background:var(--accent); opacity:.75; border-radius:1px 1px 0 0; min-height:2px; }
     .spark.ram i { background:#8b5cf6; }
@@ -69,9 +73,12 @@
       <p class="hint">{{ t('companion') }} <a href="{{ nas_admin_url }}" style="color:var(--accent2)">Ugreen NAS Admin</a></p>
     </div>
     <div class="lang-switch">
-      <span class="hint">{{ t('ui.language') }}</span>
-      <button type="button" class="{% if lang == 'de' %}active{% endif %}" onclick="setLang('de')">DE</button>
-      <button type="button" class="{% if lang == 'en' %}active{% endif %}" onclick="setLang('en')">EN</button>
+      <label class="hint" for="lang-select">{{ t('ui.language') }}</label>
+      <select id="lang-select" onchange="setLang(this.value)" aria-label="{{ t('ui.language') }}">
+        {% for code, label in lang_labels.items() %}
+        <option value="{{ code }}" {% if lang == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
     </div>
   </header>
 
@@ -112,13 +119,15 @@
       <label>{{ t('ugos.host') }} <input type="text" id="ugos-host" size="14" style="background:#0a0e12;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.2rem .35rem" /></label>
       <label>{{ t('ugos.port') }} <input type="number" id="ugos-port" min="1" max="65535" size="6" style="background:#0a0e12;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.2rem .35rem" /></label>
       <label>{{ t('ugos.user') }} <input type="text" id="ugos-user" size="12" autocomplete="username" style="background:#0a0e12;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.2rem .35rem" /></label>
-      <label>{{ t('ugos.password') }} <input type="password" id="ugos-password" size="12" placeholder="{{ t('ugos.password_placeholder') }}" autocomplete="current-password" style="background:#0a0e12;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.2rem .35rem" /></label>
+      <label>{{ t('ugos.password') }} <input type="password" id="ugos-password" size="12" placeholder="{{ t('ugos.password_placeholder') }}" autocomplete="off" style="background:#0a0e12;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.2rem .35rem" /></label>
+      <span class="hint" id="ugos-password-hint"></span>
       <label><input type="checkbox" id="ugos-https" /> {{ t('ugos.https') }}</label>
       <label><input type="checkbox" id="ugos-verify" /> {{ t('ugos.verify_ssl') }}</label>
       <button type="button" class="secondary" onclick="testUgosSettings()">{{ t('ugos.test') }}</button>
       <button type="button" onclick="saveUgosSettings()">{{ t('ugos.save') }}</button>
       <span id="ugos-settings-status"></span>
     </div>
+    <p class="hint" id="ugos-live-status"></p>
   </div>
 
   <div class="card">
@@ -250,6 +259,13 @@
     }
     let diskSettingsTouched = false;
     let ugosSettingsTouched = false;
+    let ugosPasswordSet = false;
+    function ugosErrText(code) {
+      if (code === 'password_required') return T('ugos.password_required');
+      if (code === 'username_required') return T('ugos.username_required');
+      if (code === 'credentials_missing') return T('ugos.password_not_stored');
+      return code || '';
+    }
     document.getElementById('disk-poll-interval').addEventListener('change', () => { diskSettingsTouched = true; });
     document.getElementById('disk-skip-standby').addEventListener('change', () => { diskSettingsTouched = true; });
     ['ugos-enabled','ugos-host','ugos-port','ugos-user','ugos-password','ugos-https','ugos-verify'].forEach(id => {
@@ -269,20 +285,32 @@
           verify_ssl: document.getElementById('ugos-verify').checked,
         },
       };
+      return body;
+    }
+    async function ugosSettingsBodyEnc() {
+      const body = ugosSettingsBody();
       const pw = document.getElementById('ugos-password').value;
-      if (pw) body.ugos_api.password = pw;
+      if (pw) {
+        if (typeof window.rlEncryptSecret !== 'function') {
+          throw new Error('encryption unavailable');
+        }
+        body.ugos_api.password_enc = await window.rlEncryptSecret(pw);
+      }
       return body;
     }
 
     function applyUgosSettings(ds) {
       if (!ds || !ds.ugos_api || ugosSettingsTouched) return;
       const u = ds.ugos_api;
+      ugosPasswordSet = !!u.password_set;
       document.getElementById('ugos-enabled').checked = !!u.enabled;
       document.getElementById('ugos-host').value = u.host || '127.0.0.1';
       document.getElementById('ugos-port').value = u.port || 9443;
       document.getElementById('ugos-user').value = u.username || '';
       document.getElementById('ugos-https').checked = u.use_https !== false;
       document.getElementById('ugos-verify').checked = !!u.verify_ssl;
+      const hint = document.getElementById('ugos-password-hint');
+      if (hint) hint.textContent = ugosPasswordSet ? T('ugos.password_stored') : T('ugos.password_not_stored');
     }
 
     async function testUgosSettings() {
@@ -292,7 +320,7 @@
         const r = await fetch('/api/ugos/test', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(ugosSettingsBody()),
+          body: JSON.stringify(await ugosSettingsBodyEnc()),
         });
         const j = await r.json();
         status.textContent = j.ok ? T('ugos.test_ok') : T('ugos.test_fail', {msg: j.error || '?'});
@@ -305,9 +333,20 @@
       const status = document.getElementById('ugos-settings-status');
       const btn = document.querySelector('button[onclick="saveUgosSettings()"]');
       status.textContent = '';
+      const user = document.getElementById('ugos-user').value.trim();
+      const pw = document.getElementById('ugos-password').value;
+      if (user && (pw || ugosPasswordSet)) {
+        document.getElementById('ugos-enabled').checked = true;
+      }
+      const enabled = document.getElementById('ugos-enabled').checked;
+      if (enabled && !pw && !ugosPasswordSet) {
+        status.textContent = T('ugos.password_required');
+        return;
+      }
       if (btn) btn.disabled = true;
-      const body = ugosSettingsBody();
+      status.textContent = '…';
       try {
+        const body = await ugosSettingsBodyEnc();
         const r = await fetch('/api/settings', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
@@ -320,7 +359,7 @@
           applyUgosSettings(j.settings);
           status.textContent = T('ugos.saved');
         } else {
-          status.textContent = j.error || 'Error';
+          status.textContent = ugosErrText(j.error) || 'Error';
         }
       } catch (e) {
         status.textContent = 'Error';
@@ -372,8 +411,14 @@
       if (srcEl) {
         srcEl.textContent = s && s.data_source === 'ugos' ? T('ugos.source_active') : T('ugos.source_host');
         if (s && s.ugos_error && s.data_source !== 'ugos') {
-          srcEl.textContent += ' — ' + T('ugos.error', {msg: s.ugos_error});
+          srcEl.textContent += ' — ' + T('ugos.error', {msg: ugosErrText(s.ugos_error) || s.ugos_error});
         }
+      }
+      const liveEl = document.getElementById('ugos-live-status');
+      if (liveEl) {
+        if (s && s.data_source === 'ugos') liveEl.textContent = T('ugos.source_active');
+        else if (s && s.ugos_error) liveEl.textContent = T('ugos.error', {msg: ugosErrText(s.ugos_error) || s.ugos_error});
+        else liveEl.textContent = '';
       }
       const hostOffline = !s || !s.ok;
       if (hostOffline) {
@@ -449,7 +494,10 @@
         const link = a.online
           ? `<a href="${esc(appUrl(a.port))}" target="_blank" rel="noopener">${esc(T('apps.open'))}</a>`
           : `<span class="hint">${esc(T('apps.offline'))}</span>`;
-        card.innerHTML = `<h3><span class="${stCls}">${esc(a.name)}</span> <span class="hint">${ver}</span> ${selfTag}</h3>
+        const icon = a.icon_url
+          ? `<img class="app-icon" src="${esc(a.icon_url)}" alt="" onerror="this.style.visibility='hidden'">`
+          : `<span class="app-icon" aria-hidden="true"></span>`;
+        card.innerHTML = `<h3>${icon}<span><span class="${stCls}">${esc(a.name)}</span> <span class="hint">${ver}</span> ${selfTag}</span></h3>
           <div class="vol-meta">${esc(a.summary||'—')}</div>
           <div class="vol-meta">${esc(a.detail||'')}</div>
           <div style="margin-top:.4rem">${link}</div>`;
@@ -538,6 +586,7 @@
       ].filter(Boolean).map(esc).join(' · ');
     }
     let pollInFlight = false;
+    let lastSnap = null;
     async function poll() {
       if (pollInFlight) return;
       pollInFlight = true;
@@ -546,9 +595,20 @@
       try {
         const r = await fetch('/api/snapshot', { signal: ctrl.signal });
         const j = await r.json();
-        renderSnap(j.snapshot);
-      } catch (e) { /* ignore */ }
-      finally {
+        if (j && j.snapshot) {
+          if (j.snapshot.ugos_error === 'snapshot_lock_timeout' && lastSnap) {
+            renderSnap(lastSnap);
+          } else {
+            lastSnap = j.snapshot;
+            renderSnap(j.snapshot);
+          }
+        } else if (lastSnap) {
+          renderSnap(lastSnap);
+        }
+      } catch (e) {
+        /* Keep last good frame — do not blank the UI on timeout/network blip */
+        if (lastSnap) renderSnap(lastSnap);
+      } finally {
         clearTimeout(timer);
         pollInFlight = false;
       }

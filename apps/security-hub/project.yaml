@@ -1,0 +1,111 @@
+spec_version: "2.1"
+app_id: com.runlevel.securityhub
+version: 0.1.20
+support_arch:
+  - amd64
+  - arm64
+is_docker_app: true
+only_admin: true
+port: 29130
+open_type: tab
+supports:
+  - app
+  - pc
+tag_types:
+  - security
+  - utility
+depend_fw_version: 1.13.0.0000
+depend_docker_version: 1.7.0.0000
+license_agreement_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/EULA.md"
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/LICENSE"
+source_code_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/THIRD_PARTY_LICENSES.md"
+technical_support_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues"
+privacy_policy_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/privacy/securityhub.md"
+
+
+i18n:
+  en-US:
+    name: Security Hub
+    description: "Central security tools and status checks on your UGREEN NAS. Review settings and application logs in a simple web UI for daily security operations. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/securityhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  de-DE:
+    name: Security Hub
+    description: "Zentrale Sicherheitswerkzeuge und Statusprüfungen auf dem UGREEN NAS. Einstellungen und Anwendungsprotokolle in einer einfachen Web-Oberfläche. Windows-Begleiter: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/securityhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  zh-CN:
+    name: Security Hub
+    description: "在绿联 NAS 上集中提供安全相关工具与状态检查功能，可在 Web 界面快速查看设置与应用日志，方便日常安全运维以及问题排查处理。配套 Windows 应用：Ugreen NAS Admin。"
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/securityhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  fr-FR:
+    name: Security Hub
+    description: "Outils de sécurité et contrôles d’état centralisés sur votre NAS UGREEN. Consultez paramètres et journaux dans une interface web simple. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/securityhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  es-ES:
+    name: Security Hub
+    description: "Herramientas de seguridad y comprobaciones de estado centralizadas en su NAS UGREEN. Revise ajustes y registros en una interfaz web sencilla. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/securityhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  it-IT:
+    name: Security Hub
+    description: "Strumenti di sicurezza e controlli di stato centralizzati sul NAS UGREEN. Consulta impostazioni e log in un’interfaccia web semplice. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/securityhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  pl-PL:
+    name: Security Hub
+    description: "Centralne narzędzia bezpieczeństwa i kontrole statusu na NAS UGREEN. Przeglądaj ustawienia i logi w prostym interfejsie WWW. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/securityhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  ru-RU:
+    name: Security Hub
+    description: "Централизованные инструменты безопасности и проверки статуса на UGREEN NAS. Просматривайте настройки и журналы в простом веб-интерфейсе. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/securityhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  tr-TR:
+    name: Security Hub
+    description: "UGREEN NAS üzerinde merkezi güvenlik araçları ve durum kontrolleri. Ayarları ve uygulama günlüklerini basit bir web arayüzünde inceleyin. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/securityhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  hr-HR:
+    name: Security Hub
+    description: "Središnji sigurnosni alati i provjere statusa na UGREEN NAS-u. Pregledajte postavke i zapisnike u jednostavnom web sučelju. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/securityhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"

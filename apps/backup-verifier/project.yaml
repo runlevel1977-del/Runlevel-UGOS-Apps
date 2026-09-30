@@ -1,0 +1,218 @@
+spec_version: "2.1"
+app_id: com.runlevel.backupverifier
+version: 0.3.24
+support_arch:
+  - amd64
+  - arm64
+is_docker_app: true
+only_admin: true
+port: 29110
+open_type: tab
+supports:
+  - app
+  - pc
+tag_types:
+  - backup
+  - security
+  - utility
+depend_fw_version: 1.13.0.0000
+depend_docker_version: 1.7.0.0000
+license_agreement_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/EULA.md"
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/LICENSE"
+source_code_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/THIRD_PARTY_LICENSES.md"
+technical_support_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues"
+privacy_policy_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/privacy/backupverifier.md"
+
+
+parameters:
+  - key: NAS_DATA_ROOT
+    type: path
+    required: true
+    changeable: true
+    i18n:
+      en-US:
+        name: UGOS folder shortcut
+        description: "Pick a subfolder for the volume picker (e.g. backup folder). Volume 1/2 are mounted separately. Restart after change."
+      de-DE:
+        name: UGOS-Ordner (Kurzweg)
+        description: "Unterordner für die Ordnerauswahl (z. B. SICHERN). Volume 1/2 separat. Nach Änderung App neu starten."
+      zh-CN:
+        name: UGOS 文件夹
+        description: "供应用访问的用户指定文件夹快捷方式。卷 1/2 单独挂载。更改后请重启应用。"
+      fr-FR:
+        name: Raccourci dossier UGOS
+        description: "Choisissez un sous-dossier pour le sélecteur (p. ex. sauvegarde). Volume 1/2 montés séparément. Redémarrez après modification."
+      es-ES:
+        name: Acceso directo carpeta UGOS
+        description: "Elija una subcarpeta para el selector (p. ej. copia de seguridad). Volumen 1/2 se montan por separado. Reinicie tras el cambio."
+      it-IT:
+        name: Scorciatoia cartella UGOS
+        description: "Scegliere una sottocartella per il selettore (es. backup). Volume 1/2 montati separatamente. Riavviare dopo la modifica."
+      pl-PL:
+        name: Skrót folderu UGOS
+        description: "Wybierz podfolder do selektora (np. backup). Volume 1/2 montowane osobno. Po zmianie zrestartuj aplikację."
+      ru-RU:
+        name: Ярлык папки UGOS
+        description: "Выберите подпапку для выбора тома (напр. резервная). Volume 1/2 монтируются отдельно. После изменения перезапустите приложение."
+      tr-TR:
+        name: UGOS klasör kısayolu
+        description: "Seçici için bir alt klasör seçin (örn. yedek). Volume 1/2 ayrı bağlanır. Değişiklikten sonra uygulamayı yeniden başlatın."
+      hr-HR:
+        name: Prečac UGOS mape
+        description: "Odaberite podmapu za birač (npr. sigurnosna kopija). Volume 1/2 montiraju se zasebno. Nakon promjene ponovno pokrenite aplikaciju."
+  - key: LAN_SUBNET
+    type: string
+    required: false
+    changeable: true
+    i18n:
+      en-US:
+        name: Home network (scan)
+        description: "CIDR for device scan, e.g. 192.168.2.0/24 (restart app after change)"
+      de-DE:
+        name: Heimnetz (Scan)
+        description: "Netz für Gerätesuche, z. B. 192.168.2.0/24 (nach Änderung App neu starten)"
+      zh-CN:
+        name: 局域网网段
+        description: "设备扫描 CIDR，例如 192.168.2.0/24（更改后请重启应用）"
+      fr-FR:
+        name: Réseau domestique (scan)
+        description: "CIDR pour le scan, p. ex. 192.168.2.0/24 (redémarrer l’app après modification)"
+      es-ES:
+        name: Red doméstica (escaneo)
+        description: "CIDR para el escaneo, p. ej. 192.168.2.0/24 (reinicie la app tras el cambio)"
+      it-IT:
+        name: Rete domestica (scan)
+        description: "CIDR per la scansione, es. 192.168.2.0/24 (riavviare l’app dopo la modifica)"
+      pl-PL:
+        name: Sieć domowa (skan)
+        description: "CIDR do skanowania, np. 192.168.2.0/24 (po zmianie zrestartuj aplikację)"
+      ru-RU:
+        name: Домашняя сеть (скан)
+        description: "CIDR для сканирования, напр. 192.168.2.0/24 (после изменения перезапустите приложение)"
+      tr-TR:
+        name: Ev ağı (tarama)
+        description: "Tarama için CIDR, örn. 192.168.2.0/24 (değişiklikten sonra uygulamayı yeniden başlatın)"
+      hr-HR:
+        name: Kućna mreža (sken)
+        description: "CIDR za skeniranje, npr. 192.168.2.0/24 (nakon promjene ponovno pokrenite aplikaciju)"
+  - key: SCAN_EXTRA_HOSTS
+    type: string
+    required: false
+    changeable: true
+    i18n:
+      en-US:
+        name: Extra hosts (scan)
+        description: "Optional comma-separated IPs always probed, e.g. 192.168.2.200"
+      de-DE:
+        name: Zusatz-IPs (Scan)
+        description: "Optional, kommagetrennt, z. B. 192.168.2.200 (PC immer mitscannen)"
+      zh-CN:
+        name: 额外主机
+        description: "可选额外扫描地址，逗号分隔，例如 192.168.2.200"
+      fr-FR:
+        name: Hôtes supplémentaires (scan)
+        description: "IPs optionnelles séparées par des virgules, toujours sondées, p. ex. 192.168.2.200"
+      es-ES:
+        name: Hosts extra (escaneo)
+        description: "IPs opcionales separadas por comas, siempre sondeadas, p. ej. 192.168.2.200"
+      it-IT:
+        name: Host extra (scan)
+        description: "IP opzionali separati da virgola, sempre sondati, es. 192.168.2.200"
+      pl-PL:
+        name: Dodatkowe hosty (skan)
+        description: "Opcjonalne IP rozdzielone przecinkami, zawsze sprawdzane, np. 192.168.2.200"
+      ru-RU:
+        name: Доп. хосты (скан)
+        description: "Необязательные IP через запятую, всегда проверяются, напр. 192.168.2.200"
+      tr-TR:
+        name: Ek hostlar (tarama)
+        description: "İsteğe bağlı, virgülle ayrılmış IP’ler, örn. 192.168.2.200"
+      hr-HR:
+        name: Dodatni hostovi (sken)
+        description: "Opcionalne IP adrese odvojene zarezom, npr. 192.168.2.200"
+i18n:
+  en-US:
+    name: Backup Verifier
+    description: "Read-only compare of a reference folder against a backup target on your UGREEN NAS. Optional schedules and email or Telegram alerts when files are missing or content differs. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/backupverifier.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  de-DE:
+    name: Backup Verifier
+    description: "Nur-Lese-Vergleich eines Referenzordners mit einem Backup-Ziel auf dem UGREEN NAS. Optional Zeitplan sowie E-Mail- oder Telegram-Alarm bei fehlenden oder geaenderten Dateien. Windows-Begleiter: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/backupverifier.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  zh-CN:
+    name: Backup Verifier
+    description: "在绿联 NAS 上以只读方式比对参考目录与备份目标，检查文件是否完整一致。支持定时校验，并在缺失或内容不一致时通过电子邮件或 Telegram 提醒。配套 Windows 工具：Ugreen NAS Admin。"
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/backupverifier.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  fr-FR:
+    name: Backup Verifier
+    description: "Comparaison en lecture seule d’un dossier de référence avec une cible de sauvegarde sur votre NAS UGREEN. Planifications optionnelles et alertes e-mail ou Telegram en cas de fichiers manquants ou différents. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/backupverifier.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  es-ES:
+    name: Backup Verifier
+    description: "Comparación de solo lectura de una carpeta de referencia con un destino de copia en su NAS UGREEN. Programaciones opcionales y alertas por correo o Telegram si faltan archivos o el contenido difiere. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/backupverifier.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  it-IT:
+    name: Backup Verifier
+    description: "Confronto in sola lettura di una cartella di riferimento con una destinazione di backup sul NAS UGREEN. Pianificazioni opzionali e avvisi e-mail o Telegram se mancano file o il contenuto differisce. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/backupverifier.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  pl-PL:
+    name: Backup Verifier
+    description: "Porównanie tylko do odczytu folderu referencyjnego z celem kopii na NAS UGREEN. Opcjonalne harmonogramy oraz alerty e-mail lub Telegram przy brakujących lub różniących się plikach. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/backupverifier.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  ru-RU:
+    name: Backup Verifier
+    description: "Сравнение только для чтения эталонной папки с целью резервной копии на UGREEN NAS. Опциональные расписания и оповещения по e-mail или Telegram при отсутствии или отличии файлов. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/backupverifier.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  tr-TR:
+    name: Backup Verifier
+    description: "UGREEN NAS üzerinde bir referans klasörü ile yedek hedefini salt okunur karşılaştırır. İsteğe bağlı zamanlamalar ve eksik/farklı dosyalarda e-posta veya Telegram uyarıları. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/backupverifier.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  hr-HR:
+    name: Backup Verifier
+    description: "Uspoređuje referentnu mapu s odredištem sigurnosne kopije na UGREEN NAS-u samo za čitanje. Opcionalni rasporedi te e-mail ili Telegram upozorenja kod nedostajućih ili različitih datoteka. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/backupverifier.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"

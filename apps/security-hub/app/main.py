@@ -11,14 +11,16 @@ from compliance import (
     save_privacy_consent,
 )
 from flask import Flask, g, jsonify, make_response, render_template, request
+from ugos_auth import init_ugos_auth
 
-from i18n import LANG_COOKIE, bundle, get_lang, lang_from_request, normalize_lang, t
+from i18n import LANG_COOKIE, LANG_LABELS, bundle, get_lang, lang_from_request, normalize_lang, t
 from icon_sync import sync_appcenter_icon
 from monitor import get_monitor, touch_client_activity
 from store import DATA_DIR, append_log, read_log_tail
 
 app = Flask(__name__)
-APP_VERSION = os.environ.get("SECURITY_HUB_VERSION", "0.1.12")
+init_ugos_auth(app)
+APP_VERSION = os.environ.get("SECURITY_HUB_VERSION", "0.1.20")
 NAS_ADMIN_URL = os.environ.get(
     "NAS_ADMIN_URL",
     "https://github.com/runlevel1977-del/UgreenNASAdmin/releases/latest",
@@ -46,6 +48,7 @@ def _inject_i18n():
         "lang": lng,
         "t": _t,
         "i18n": bundle(lng),
+        "lang_labels": LANG_LABELS,
         "nas_admin_url": NAS_ADMIN_URL,
         **compliance_context(DATA_DIR),
     }
@@ -53,7 +56,7 @@ def _inject_i18n():
 
 @app.route("/health")
 def health():
-    return jsonify({"ok": True, "version": APP_VERSION, "lang": get_lang()})
+    return jsonify({"ok": True})
 
 
 @app.route("/")
@@ -71,7 +74,7 @@ def api_set_lang():
     body = request.get_json(force=True, silent=True) or {}
     picked = normalize_lang(body.get("lang"))
     if not picked:
-        return jsonify({"ok": False, "error": "lang must be de or en"}), 400
+        return jsonify({"ok": False, "error": "unsupported lang"}), 400
     resp = jsonify({"ok": True, "lang": picked, "i18n": bundle(picked)})
     return _lang_cookie_response(resp, picked)
 
@@ -148,7 +151,9 @@ def api_privacy_status():
 
 @app.route("/api/privacy/consent", methods=["POST"])
 def api_privacy_consent():
-    row = save_privacy_consent(DATA_DIR)
+    body = request.get_json(force=True, silent=True) or {}
+    accepted = bool(body.get("accepted", True)) and not bool(body.get("declined"))
+    row = save_privacy_consent(DATA_DIR, accepted=accepted)
     return jsonify({"ok": True, "consent": row})
 
 if __name__ == "__main__":

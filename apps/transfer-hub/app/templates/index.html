@@ -44,16 +44,20 @@
     .dir-list li { padding: 0.35rem 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
     .dir-list li .row-label { flex: 1; min-width: 120px; }
     .dir-list li .row-actions { white-space: nowrap; }
+    .dir-list li .row-check { margin-right: 0.35rem; }
+    .folder-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.35rem 0; min-height: 1.6rem; }
+    .folder-chip { display: inline-flex; align-items: center; gap: 0.35rem; background: #0a0e12; border: 1px solid var(--border); border-radius: 6px; padding: 0.25rem 0.5rem; font-size: 0.82rem; }
     .badge { font-size: 0.72rem; padding: 0.1rem 0.4rem; border-radius: 4px; background: #2a3f5f; }
     pre { background: #0a0e12; padding: 0.75rem; overflow: auto; max-height: 180px; font-size: 0.78rem; border-radius: 6px; }
     .page-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 1rem; max-width: 1400px; margin-bottom: 0.5rem; }
     .page-header .title-block { flex: 1; min-width: 220px; }
     .page-header h1 { margin-bottom: 0.25rem; }
-    .lang-switch { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
-    .lang-switch .lang-label { font-size: 0.8rem; color: var(--muted); margin-right: 0.25rem; }
-    .lang-switch button.lang-btn { background: #2a3545; color: var(--muted); margin: 0; min-width: 2.6rem; font-weight: 600; }
-    .lang-switch button.lang-btn.active { background: var(--accent); color: #fff; }
-    .lang-switch button.lang-btn:not(.active):hover { color: var(--text); }
+    .lang-switch { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+    .lang-switch .lang-label { font-size: 0.8rem; color: var(--muted); }
+    .lang-switch select {
+      background: #0a0e12; color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 0.35rem 0.55rem; font-size: 0.85rem; min-width: 7.5rem;
+    }
     .companion-link { font-size: 0.82rem; color: var(--muted); margin: 0.35rem 0 0; }
     .companion-link a { color: var(--accent); text-decoration: none; }
     .companion-link a:hover { text-decoration: underline; }
@@ -69,10 +73,13 @@
         <a href="{{ nas_admin_url }}" target="_blank" rel="noopener noreferrer">{{ t('footer.nas_admin_link') }}</a>
       </p>
     </div>
-    <div class="lang-switch" role="group" aria-label="{{ t('ui.language') }}">
-      <span class="lang-label">{{ t('ui.language') }}</span>
-      <button type="button" class="lang-btn{% if lang == 'de' %} active{% endif %}" onclick="setLang('de')"{% if lang == 'de' %} aria-current="true"{% endif %}>DE</button>
-      <button type="button" class="lang-btn{% if lang == 'en' %} active{% endif %}" onclick="setLang('en')"{% if lang == 'en' %} aria-current="true"{% endif %}>EN</button>
+    <div class="lang-switch">
+      <label class="lang-label" for="lang-select">{{ t('ui.language') }}</label>
+      <select id="lang-select" onchange="setLang(this.value)" aria-label="{{ t('ui.language') }}">
+        {% for code, label in lang_labels.items() %}
+        <option value="{{ code }}" {% if lang == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
     </div>
   </header>
 
@@ -108,9 +115,11 @@
     <p><strong>{{ t('profile.source') }}</strong></p>
     <div class="pick">
       <select id="src-device" style="min-width:180px"></select>
-      <span class="sel" id="src-label">{{ t('profile.pick_none') }}</span>
       <button type="button" class="secondary" onclick="openPicker('new','src')">{{ t('profile.pick_folder') }}</button>
     </div>
+    <p class="hint" style="margin:.25rem 0 .35rem">{{ t('profile.selected_folders') }}</p>
+    <div class="folder-chips" id="src-selected"></div>
+    <p class="hint" id="src-empty-hint">{{ t('profile.pick_none') }}</p>
     <p><strong>{{ t('profile.dest') }}</strong></p>
     <div class="pick">
       <select id="dst-device" style="min-width:180px"></select>
@@ -193,9 +202,11 @@
       <p><strong>{{ t('profile.source') }}</strong></p>
       <div class="pick">
         <select id="edit-src-device" style="min-width:180px"></select>
-        <span class="sel" id="edit-src-label">{{ t('profile.pick_none') }}</span>
         <button type="button" class="secondary" onclick="openPicker('edit','src')">{{ t('profile.pick_folder') }}</button>
       </div>
+      <p class="hint" style="margin:.25rem 0 .35rem">{{ t('profile.selected_folders') }}</p>
+      <div class="folder-chips" id="edit-src-selected"></div>
+      <p class="hint" id="edit-src-empty-hint">{{ t('profile.pick_none') }}</p>
       <p><strong>{{ t('profile.dest') }}</strong></p>
       <div class="pick">
         <select id="edit-dst-device" style="min-width:180px"></select>
@@ -241,19 +252,35 @@
     <div class="modal-box wide">
       <h2>{{ t('modal.pick_folder') }}</h2>
       <p class="hint" id="pick-hint">{{ t('modal.pick_hint') }}</p>
+      <p class="hint" id="pick-multi-hint" style="display:none">{{ t('profile.pick_multi_hint') }}</p>
       <p class="hint" id="pick-breadcrumb"></p>
       <button type="button" class="link" id="pick-up" onclick="pickUp()" style="display:none">{{ t('modal.pick_up') }}</button>
       <ul class="dir-list" id="pick-list"></ul>
-      <button type="button" onclick="confirmPickHere()">{{ t('modal.pick_here') }}</button>
+      <div id="pick-src-actions" style="display:none">
+        <button type="button" onclick="addCheckedSrcFolders()">{{ t('profile.pick_add_checked') }}</button>
+        <button type="button" class="secondary" onclick="replaceWithCurrentPick()">{{ t('profile.pick_replace_here') }}</button>
+      </div>
+      <div id="pick-dst-actions">
+        <button type="button" onclick="confirmPickHere()">{{ t('modal.pick_here') }}</button>
+      </div>
       <button type="button" class="secondary" onclick="closeModal('modal-pick')">{{ t('modal.cancel') }}</button>
     </div>
   </div>
 
+  <script src="/static/rsa_http.js"></script>
   <script>
     const LANG = {{ lang|tojson }};
     const I18N = {{ i18n|tojson }};
     const LANG_COOKIE = 'transfer_hub_lang';
     function T(k) { return I18N[k] || k; }
+
+    async function encryptSecret(plain) {
+      if (!plain) return '';
+      if (typeof window.rlEncryptSecret !== 'function') {
+        throw new Error('encryption unavailable');
+      }
+      return window.rlEncryptSecret(plain);
+    }
 
     async function setLang(code) {
       if (code === LANG) return;
@@ -287,9 +314,10 @@
     let pickMode = 'new';
     let pickSide = 'src';
     let pickState = { device_id: 'local', share: '', path: '', volume: '' };
-    let srcSel = null, dstSel = null;
+    let pickEntries = [];
+    let srcPaths = [], dstSel = null;
     let editProfileId = null;
-    let editSrcSel = null, editDstSel = null;
+    let editSrcPaths = [], editDstSel = null;
     let pendingHost = '';
 
     function volLabel(v) {
@@ -305,6 +333,132 @@
 
     function deviceOptionsHtml() {
       return devices.map(d => `<option value="${d.id}">${esc(d.name)} (${d.type})</option>`).join('');
+    }
+
+    function srcPathKey(ep) {
+      return [ep.device_id, ep.volume || '', ep.share || '', ep.path || ''].join('|');
+    }
+
+    function getSrcPaths() {
+      return pickMode === 'edit' ? editSrcPaths : srcPaths;
+    }
+
+    function setSrcPaths(arr) {
+      if (pickMode === 'edit') editSrcPaths = arr;
+      else srcPaths = arr;
+    }
+
+    function refreshSrcSelected(mode) {
+      const isEdit = mode === 'edit';
+      const box = document.getElementById(isEdit ? 'edit-src-selected' : 'src-selected');
+      const empty = document.getElementById(isEdit ? 'edit-src-empty-hint' : 'src-empty-hint');
+      const paths = isEdit ? editSrcPaths : srcPaths;
+      box.innerHTML = '';
+      if (!paths.length) {
+        empty.style.display = '';
+        return;
+      }
+      empty.style.display = 'none';
+      paths.forEach((ep, idx) => {
+        const chip = document.createElement('span');
+        chip.className = 'folder-chip';
+        const rm = isEdit
+          ? 'removeEditSrcPath(' + idx + ')'
+          : 'removeSrcPath(' + idx + ')';
+        chip.innerHTML = esc(endpointDisplayLabel(ep))
+          + ' <button type="button" class="link" onclick="' + rm + '">×</button>';
+        box.appendChild(chip);
+      });
+    }
+
+    function removeSrcPath(idx) {
+      srcPaths.splice(idx, 1);
+      refreshSrcSelected('new');
+    }
+
+    function removeEditSrcPath(idx) {
+      editSrcPaths.splice(idx, 1);
+      refreshSrcSelected('edit');
+    }
+
+    function currentPickEndpoint() {
+      return {
+        device_id: pickState.device_id,
+        share: pickState.share || '',
+        path: pickState.path || '',
+        volume: pickState.volume || '',
+      };
+    }
+
+    function validatePickEndpoint(ep) {
+      const dev = devices.find(d => d.id === ep.device_id);
+      if (dev && dev.type === 'local' && !ep.volume) {
+        alert(T('err.pick_volume_first'));
+        return false;
+      }
+      if (dev && dev.type === 'smb' && !ep.share) {
+        alert(T('err.smb_share_missing'));
+        return false;
+      }
+      return true;
+    }
+
+    function addSrcEndpoint(ep, replace) {
+      if (!validatePickEndpoint(ep)) return;
+      let paths = getSrcPaths().slice();
+      if (replace) {
+        paths = [ep];
+      } else {
+        const key = srcPathKey(ep);
+        if (!paths.some(p => srcPathKey(p) === key)) paths.push(ep);
+      }
+      setSrcPaths(paths);
+      const prefix = pickMode === 'edit' ? 'edit-' : '';
+      document.getElementById(prefix + 'src-device').value = ep.device_id;
+      refreshSrcSelected(pickMode);
+    }
+
+    function endpointFromPickEntry(e) {
+      const ep = currentPickEndpoint();
+      if (e.kind === 'volume') { ep.volume = e.volume || ''; ep.path = ''; ep.share = ''; }
+      else if (e.kind === 'share') { ep.share = e.name; ep.path = ''; }
+      else if (e.kind === 'dir') { ep.path = e.path; }
+      return ep;
+    }
+
+    function addCheckedSrcFolders() {
+      const checks = document.querySelectorAll('#pick-list input[data-pick-check]:checked');
+      if (!checks.length) {
+        addSrcEndpoint(currentPickEndpoint(), false);
+        closeModal('modal-pick');
+        return;
+      }
+      for (const cb of checks) {
+        const idx = parseInt(cb.getAttribute('data-pick-idx'), 10);
+        const e = pickEntries[idx];
+        if (e) addSrcEndpoint(endpointFromPickEntry(e), false);
+      }
+      closeModal('modal-pick');
+    }
+
+    function replaceWithCurrentPick() {
+      addSrcEndpoint(currentPickEndpoint(), true);
+      closeModal('modal-pick');
+    }
+
+    function buildSourcePayload(mode) {
+      const pathsArr = mode === 'edit' ? editSrcPaths : srcPaths;
+      if (!pathsArr.length) return null;
+      const prefix = mode === 'edit' ? 'edit-' : '';
+      const base = { ...pathsArr[0], device_id: document.getElementById(prefix + 'src-device').value };
+      const paths = pathsArr.map(p => (p.path || '').trim()).filter((p, i, arr) => arr.indexOf(p) === i);
+      return {
+        device_id: base.device_id,
+        share: base.share || '',
+        volume: base.volume || '',
+        paths,
+        path: paths.length === 1 ? paths[0] : '',
+      };
     }
 
     function endpointDisplayLabel(ep) {
@@ -402,12 +556,18 @@
     }
 
     async function confirmSaveDevice() {
+      const pw = document.getElementById('save-pass').value;
       const body = {
         host: pendingHost,
         name: document.getElementById('save-name').value,
         username: document.getElementById('save-user').value,
-        password: document.getElementById('save-pass').value,
       };
+      try {
+        if (pw) body.password_enc = await encryptSecret(pw);
+      } catch (e) {
+        document.getElementById('save-err').textContent = T('err.generic');
+        return;
+      }
       const r = await apiFetch('/api/devices', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
@@ -431,12 +591,16 @@
       await loadScanConfig();
       const prefix = mode === 'edit' ? 'edit-' : '';
       const devId = document.getElementById(prefix + side + '-device').value;
-      const cur = mode === 'edit'
-        ? (side === 'src' ? editSrcSel : editDstSel)
-        : (side === 'src' ? srcSel : dstSel);
+      const srcList = mode === 'edit' ? editSrcPaths : srcPaths;
+      const cur = side === 'dst'
+        ? (mode === 'edit' ? editDstSel : dstSel)
+        : (srcList.length ? srcList[srcList.length - 1] : null);
       pickState = cur
         ? { device_id: cur.device_id, share: cur.share || '', path: cur.path || '', volume: cur.volume || '' }
         : { device_id: devId, share: '', path: '', volume: '' };
+      document.getElementById('pick-multi-hint').style.display = side === 'src' ? '' : 'none';
+      document.getElementById('pick-src-actions').style.display = side === 'src' ? '' : 'none';
+      document.getElementById('pick-dst-actions').style.display = side === 'dst' ? '' : 'none';
       document.getElementById('modal-pick').classList.add('open');
       loadPickList();
     }
@@ -464,13 +628,23 @@
       }
       document.getElementById('pick-breadcrumb').textContent = crumb || T('picker.root');
       if (j.hint) document.getElementById('pick-hint').textContent = j.hint;
+      else document.getElementById('pick-hint').textContent = T('modal.pick_hint');
       const canUp = j.share || j.path || j.volume;
       document.getElementById('pick-up').style.display = canUp ? 'inline' : 'none';
       const ul = document.getElementById('pick-list');
       ul.innerHTML = '';
-      for (const e of (j.entries || [])) {
+      pickEntries = j.entries || [];
+      pickEntries.forEach((e, idx) => {
         const li = document.createElement('li');
         const icon = e.kind === 'volume' ? '📦 ' : e.kind === 'share' ? '📁 ' : '📂 ';
+        if (pickSide === 'src' && (e.kind === 'volume' || e.kind === 'share' || e.kind === 'dir')) {
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.className = 'row-check';
+          cb.setAttribute('data-pick-check', '1');
+          cb.setAttribute('data-pick-idx', String(idx));
+          li.appendChild(cb);
+        }
         const label = document.createElement('span');
         label.className = 'row-label';
         label.textContent = icon + e.name;
@@ -493,7 +667,7 @@
         }
         if (acts.innerHTML) li.appendChild(acts);
         ul.appendChild(li);
-      }
+      });
     }
 
     function openPickEntry(e) {
@@ -521,9 +695,9 @@
       } else if (e.kind === 'dir') {
         pickState.path = e.path;
       }
-      const dev = devices.find(d => d.id === pickState.device_id);
-      if (dev && dev.type === 'local' && !pickState.volume) {
-        alert(T('err.pick_volume_first'));
+      if (pickSide === 'src') {
+        addSrcEndpoint(endpointFromPickEntry(e), true);
+        closeModal('modal-pick');
         return;
       }
       confirmPickHere();
@@ -543,38 +717,22 @@
     }
 
     function confirmPickHere() {
-      const dev = devices.find(d => d.id === pickState.device_id);
-      if (dev && dev.type === 'local' && !pickState.volume) {
-        alert(T('err.pick_volume_first'));
+      const ep = currentPickEndpoint();
+      if (!validatePickEndpoint(ep)) return;
+      const label = endpointDisplayLabel(ep);
+      if (pickSide === 'src') {
+        addSrcEndpoint(ep, true);
+        closeModal('modal-pick');
         return;
       }
-      const ep = {
-        device_id: pickState.device_id,
-        share: pickState.share || '',
-        path: pickState.path || '',
-        volume: pickState.volume || '',
-      };
-      const label = endpointDisplayLabel(ep);
       if (pickMode === 'edit') {
-        if (pickSide === 'src') {
-          editSrcSel = ep;
-          document.getElementById('edit-src-label').textContent = label;
-          document.getElementById('edit-src-device').value = ep.device_id;
-        } else {
-          editDstSel = ep;
-          document.getElementById('edit-dst-label').textContent = label;
-          document.getElementById('edit-dst-device').value = ep.device_id;
-        }
+        editDstSel = ep;
+        document.getElementById('edit-dst-label').textContent = label;
+        document.getElementById('edit-dst-device').value = ep.device_id;
       } else {
-        if (pickSide === 'src') {
-          srcSel = ep;
-          document.getElementById('src-label').textContent = label;
-          document.getElementById('src-device').value = ep.device_id;
-        } else {
-          dstSel = ep;
-          document.getElementById('dst-label').textContent = label;
-          document.getElementById('dst-device').value = ep.device_id;
-        }
+        dstSel = ep;
+        document.getElementById('dst-label').textContent = label;
+        document.getElementById('dst-device').value = ep.device_id;
       }
       closeModal('modal-pick');
     }
@@ -644,10 +802,11 @@
     }
 
     async function createProfile() {
-      if (!srcSel || !dstSel) { alert(T('err.pick_source_dest')); return; }
+      const source = buildSourcePayload('new');
+      if (!source || !dstSel) { alert(T('err.pick_source_dest')); return; }
       const body = {
         name: document.getElementById('pname').value,
-        source: srcSel,
+        source,
         dest: dstSel,
         auto_sync: document.getElementById('auto_sync').checked,
         delete_source_after: document.getElementById('delete_source_after').checked,
@@ -661,8 +820,9 @@
       });
       const j = await r.json();
       if (!j.ok) { alert(j.error); return; }
-      srcSel = dstSel = null;
-      document.getElementById('src-label').textContent = T('profile.pick_none');
+      srcPaths = [];
+      dstSel = null;
+      refreshSrcSelected('new');
       document.getElementById('dst-label').textContent = T('profile.pick_none');
       loadProfiles();
       loadLog();
@@ -693,7 +853,16 @@
       const p = profilesCache.find(x => x.id === id);
       if (!p) { alert(T('err.profile_not_found')); return; }
       editProfileId = id;
-      editSrcSel = p.source ? { volume: '', ...p.source } : null;
+      const src = Object.assign({ volume: '' }, p.source || {});
+      const paths = Array.isArray(src.paths) && src.paths.length
+        ? src.paths.map(x => String(x || ''))
+        : [String(src.path || '')];
+      editSrcPaths = paths.map(path => ({
+        device_id: src.device_id || 'local',
+        share: src.share || '',
+        volume: src.volume || '',
+        path: path,
+      }));
       editDstSel = p.dest ? { volume: '', ...p.dest } : null;
       document.getElementById('edit-pname').value = p.name || '';
       document.getElementById('edit-auto_sync').checked = !!p.auto_sync;
@@ -705,12 +874,10 @@
       document.getElementById('edit-window_end').value = p.window_end || '22:00';
       updateScheduleUi('edit');
       document.getElementById('edit-err').textContent = '';
-      if (editSrcSel) {
-        document.getElementById('edit-src-device').value = editSrcSel.device_id;
-        document.getElementById('edit-src-label').textContent = p.source_label || endpointDisplayLabel(editSrcSel);
-      } else {
-        document.getElementById('edit-src-label').textContent = T('profile.pick_none');
+      if (editSrcPaths.length) {
+        document.getElementById('edit-src-device').value = editSrcPaths[0].device_id;
       }
+      refreshSrcSelected('edit');
       if (editDstSel) {
         document.getElementById('edit-dst-device').value = editDstSel.device_id;
         document.getElementById('edit-dst-label').textContent = p.dest_label || endpointDisplayLabel(editDstSel);
@@ -721,13 +888,14 @@
     }
 
     async function saveEditProfile() {
-      if (!editProfileId || !editSrcSel || !editDstSel) {
+      const source = buildSourcePayload('edit');
+      if (!editProfileId || !source || !editDstSel) {
         document.getElementById('edit-err').textContent = T('err.pick_both');
         return;
       }
       const body = {
         name: document.getElementById('edit-pname').value,
-        source: editSrcSel,
+        source,
         dest: editDstSel,
         auto_sync: document.getElementById('edit-auto_sync').checked,
         delete_source_after: document.getElementById('edit-delete_source_after').checked,

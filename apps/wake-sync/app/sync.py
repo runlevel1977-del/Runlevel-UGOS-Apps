@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from devices import endpoint_path_list, endpoint_uses_smb, rclone_remote_url
+from devices import endpoint_path_list, endpoint_uses_smb, rclone_remote_url, redact_rclone_secrets
 from job_progress import (
     is_cancelled,
     register_proc,
@@ -246,16 +246,27 @@ def run_sync(
     route_idx: int = 1,
     route_total: int = 1,
 ) -> tuple[bool, str, dict]:
-    """One-way incremental sync: local NAS → SMB target (e.g. QNAP)."""
+    """One-way incremental sync: local↔SMB (push or pull)."""
     try:
         src_url = rclone_remote_url(source_ep)
         dst_url = rclone_remote_url(dest_ep)
     except ValueError as ex:
         return False, "path_error", {"tail": str(ex)}
 
-    src = Path(src_url)
-    if not src.is_dir():
-        return False, "source_missing", {"source": src_url}
+    # Local sources are filesystem paths; SMB sources are rclone :smb,...: URLs
+    # and must not be checked with Path.is_dir() (that caused false source_missing on pull).
+    if not endpoint_uses_smb(source_ep):
+        src = Path(src_url)
+        if not src.is_dir():
+            return False, "source_missing", {"source": src_url}
+
+    # Ensure local destination parent exists (pull → this NAS).
+    if not endpoint_uses_smb(dest_ep):
+        dst = Path(dst_url)
+        try:
+            dst.mkdir(parents=True, exist_ok=True)
+        except OSError as ex:
+            return False, "path_error", {"tail": f"dest mkdir: {ex}"}
 
     uses_smb = endpoint_uses_smb(source_ep) or endpoint_uses_smb(dest_ep)
     perf_modes = [True, False] if smb_performance and uses_smb else [False]
@@ -272,7 +283,7 @@ def run_sync(
             dst_url,
             *_rclone_sync_args(source_ep, dest_ep, smb_performance=perf),
         ]
-        append_log(f"SYNC{mode_note} {' '.join(cmd[:6])}… → {dst_url[:100]}…")
+        append_log(f"SYNC{mode_note} {' '.join(cmd[:6])}… → {redact_rclone_secrets(dst_url)[:100]}…")
         code, lines, cancelled = _run_rclone_sync_once(
             cmd,
             plan_id=plan_id,
@@ -281,12 +292,12 @@ def run_sync(
         )
         last_lines = lines
         if cancelled or (plan_id and is_cancelled(plan_id)):
-            tail = "\n".join(lines[-25:])
+            tail = redact_rclone_secrets("\n".join(lines[-25:]))
             append_log("SYNC cancelled")
             return False, "cancelled", {"tail": tail}
 
         output = "\n".join(lines)
-        tail = "\n".join(output.strip().splitlines()[-25:])
+        tail = redact_rclone_secrets("\n".join(output.strip().splitlines()[-25:]))
         if code == 0 and not _rclone_had_errors(output):
             if perf and smb_performance:
                 append_log("SMB Performance-Modus erfolgreich")
@@ -297,5 +308,5 @@ def run_sync(
         if not perf:
             return False, "sync_error", {"exit_code": code, "tail": tail}
 
-    tail = "\n".join(last_lines[-25:])
+    tail = redact_rclone_secrets("\n".join(last_lines[-25:]))
     return False, "sync_error", {"tail": tail}

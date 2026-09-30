@@ -15,7 +15,15 @@ from i18n import get_lang, t
 from progress import set_progress
 from store import append_log
 
-_ITEMIZE_CHANGE = re.compile(r"^[<>ch.*][f.][.s.+][.s.+][.p.][.o.][.g.][.u.][.a.][.x.]")
+# rsync --itemize-changes: YXcstpoguax (11 chars). Old regex skipped ``t`` and used
+# ``s`` in the checksum column, so content diffs like ``>fcst......`` / ``>fcsT......``
+# never matched → false "No differences — backup matches" after folders diverged.
+_ITEMIZE_CHANGE = re.compile(
+    r"^(?:"
+    r"[<>ch.][fdLDS.][cC.+][sS.+][tT.+][pP.+][oO.+][gG.+][uU.+][aA.+][xX.+]"
+    r"|[*]deleting"
+    r")"
+)
 _USB_FS = frozenset({"vfat", "msdos", "exfat", "ntfs", "fuseblk"})
 _RCLONE_SIZE_OBJECTS = re.compile(r"Total objects:\s*(\d+)", re.IGNORECASE)
 _RCLONE_SIZE_BYTES = re.compile(r"Total size:\s*([\d.]+)\s*(\w+)", re.IGNORECASE)

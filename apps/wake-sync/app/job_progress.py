@@ -125,6 +125,9 @@ def init_job(plan: dict[str, Any], *, lang: str | None = None) -> None:
             "phase": "wol",
             "percent": 0,
             "detail": t("jobs.phase.wol", lng),
+            "detail_key": "jobs.phase.wol",
+            "message_key": "",
+            "message_params": {},
             "route_note": "",
             "route_idx": 0,
             "route_total": 0,
@@ -191,23 +194,37 @@ def unregister_proc(plan_id: str) -> None:
         _procs.pop(plan_id, None)
 
 
-def finish_job(plan_id: str, *, status: str, message: str = "", lang: str | None = None) -> None:
+def finish_job(
+    plan_id: str,
+    *,
+    status: str,
+    message: str = "",
+    message_key: str = "",
+    message_params: dict[str, Any] | None = None,
+    lang: str | None = None,
+) -> None:
     """Mark job complete and remove from panel after delay."""
     lng = lang or get_lang()
-    label = {
-        "ok": t("jobs.done", lng),
-        "error": t("jobs.failed", lng),
-        "cancelled": t("jobs.cancelled", lng),
-    }.get(status, status)
+    status_key = {
+        "ok": "jobs.done",
+        "error": "jobs.failed",
+        "cancelled": "jobs.cancelled",
+    }.get(status, "")
+    label = t(status_key, lng) if status_key else status
+    params = dict(message_params or {})
+    key = message_key or status_key
     set_job(
         plan_id,
         status=status,
         phase="done",
         percent=100 if status == "ok" else 0,
         detail=message or label,
+        detail_key=key,
+        message=message,
+        message_key=key,
+        message_params=params,
         speed="",
         eta="",
-        message=message,
     )
     _remove_job_later(plan_id)
 

@@ -12,9 +12,29 @@ from email.message import EmailMessage
 from typing import Any
 
 from i18n import get_lang, t
-from store import append_log, load_settings, save_settings
+from secret_box import decrypt_secret, encrypt_secret
+from store import DATA_DIR, append_log, load_settings, save_settings
 
 _MASK = "***"
+_SECRET_KEYS = ("telegram_bot_token", "smtp_password")
+_PII_KEYS = ("telegram_chat_id", "smtp_user", "smtp_host", "email_from", "email_to")
+_ENCRYPTED_KEYS = _SECRET_KEYS + _PII_KEYS
+
+
+def _encrypt_secrets(settings: dict[str, Any]) -> dict[str, Any]:
+    out = dict(settings)
+    for key in _ENCRYPTED_KEYS:
+        val = str(out.get(key) or "")
+        if val and val != _MASK:
+            out[key] = encrypt_secret(DATA_DIR, val)
+    return out
+
+
+def _decrypt_secrets(settings: dict[str, Any]) -> dict[str, Any]:
+    out = dict(settings)
+    for key in _ENCRYPTED_KEYS:
+        out[key] = decrypt_secret(DATA_DIR, str(out.get(key) or ""))
+    return out
 
 
 def _env_default(key: str, default: str = "") -> str:
@@ -54,7 +74,7 @@ def _merge_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def get_notify_settings() -> dict[str, Any]:
-    return _merge_settings(load_settings())
+    return _decrypt_secrets(_merge_settings(load_settings()))
 
 
 def _field_from_app(stored: dict[str, Any], key: str) -> bool:
@@ -78,6 +98,11 @@ def public_settings(settings: dict[str, Any] | None = None) -> dict[str, Any]:
         pub["smtp_password_set"] = True
     else:
         pub["smtp_password_set"] = False
+    for key in _PII_KEYS:
+        present = bool(str(pub.get(key) or "").strip())
+        pub[f"{key}_set"] = present
+        if present:
+            pub[key] = ""
     pub["telegram_from_app"] = _field_from_app(stored, "telegram_bot_token")
     pub["telegram_chat_from_app"] = _field_from_app(stored, "telegram_chat_id")
     pub["smtp_from_app"] = _field_from_app(stored, "smtp_host")
@@ -107,7 +132,7 @@ def save_notify_settings(body: dict[str, Any]) -> dict[str, Any]:
         if key not in body:
             continue
         val = body[key]
-        if key in ("telegram_bot_token", "smtp_password") and val in (_MASK, "", None):
+        if key in _ENCRYPTED_KEYS and val in (_MASK, "", None):
             continue
         if key == "smtp_port":
             try:
@@ -117,7 +142,7 @@ def save_notify_settings(body: dict[str, Any]) -> dict[str, Any]:
         if key in ("notify_on_fail", "telegram_enabled", "email_enabled", "smtp_tls"):
             val = bool(val)
         cur[key] = val
-    save_settings(cur)
+    save_settings(_encrypt_secrets(cur))
     return public_settings(cur)
 
 

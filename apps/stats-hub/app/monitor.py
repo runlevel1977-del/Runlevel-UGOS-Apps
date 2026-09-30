@@ -15,12 +15,16 @@ from collect import (
     collect_raid,
     collect_top_processes,
     cpu_pct,
+    disks_io_busy,
+    fill_iface_meta,
     fmt_rate,
+    is_docker_bridge_iface,
     parse_cpu_line,
     parse_cpu_temp_c,
     parse_default_route_dev,
     parse_fan_rpms,
     parse_ip_addr,
+    parse_proc_default_route,
     parse_ram_pct,
     parse_volumes,
     physical_ifaces,
@@ -44,7 +48,7 @@ _HISTORY = 90
 # Main loop: light tick every TICK_SEC; heavy work on separate counters.
 ACTIVE_TICK_SEC = 3.0
 IDLE_TICK_SEC = 30.0
-IDLE_AFTER_SEC = 45.0  # no visible browser tab polling this long → pause background work
+IDLE_AFTER_SEC = 180.0  # no UI poll this long → pause background work (was 45s; mobile tabs throttle)
 DF_EVERY_N = 20          # ~60 s active
 HW_SENSORS_EVERY_N = 10  # ~30 s (CPU temp, fan RPM)
 DOCKER_LIST_EVERY_N = 20  # ~60 s container list
@@ -56,6 +60,7 @@ _client_wake = threading.Event()
 _wake_refresh_lock = threading.Lock()
 _wake_refresh_running = False
 _last_client_at = 0.0
+_last_disk_refresh_at = 0.0
 _state: dict[str, Any] = {
     "ok": False,
     "cpu": None,
@@ -83,10 +88,24 @@ _state: dict[str, Any] = {
     "ugos_model": "",
     "ugos_pools": [],
     "ugos_disks": [],
+    "disk_settings": {},
 }
 _prev_cpu: tuple[int, int] | None = None
 _prev_net: dict[str, tuple[int, int]] = {}
 _running = False
+_published: dict[str, Any] = {}
+
+
+def sync_disk_settings_cache() -> None:
+    """Keep settings in memory so /api/snapshot never touches the data volume."""
+    from settings import settings_for_api
+
+    try:
+        ds = settings_for_api()
+    except Exception:
+        return
+    with _lock:
+        _state["disk_settings"] = ds
 
 
 def touch_client_activity() -> None:
@@ -124,8 +143,75 @@ def _wait_while_idle() -> None:
         _client_wake.clear()
 
 
+def _disk_interval_due() -> bool:
+    """True if host SMART/disk poll interval has elapsed (or never ran)."""
+    interval = get_disk_poll_interval_sec()
+    if _last_disk_refresh_at <= 0:
+        return True
+    return (time.time() - _last_disk_refresh_at) >= interval
+
+
+def _keep_last_disk_temps(
+    new_rows: list[dict[str, Any]], old_rows: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Keep last °C when a refresh returns the disk but no temperature."""
+    old_by = {str(r.get("name") or ""): r for r in old_rows if r.get("name")}
+    out: list[dict[str, Any]] = []
+    for row in new_rows:
+        if row.get("temp_c") is None and not row.get("standby"):
+            prev = old_by.get(str(row.get("name") or ""))
+            if prev and prev.get("temp_c") is not None:
+                row = dict(row)
+                row["temp_c"] = prev["temp_c"]
+                row["health"] = prev.get("health") or row.get("health")
+        out.append(row)
+    return out
+
+
+def _refresh_storage(*, reason: str) -> None:
+    """RAID + disk temps. Skips SMART while disks are busy (e.g. Transfer Hub)."""
+    global _last_disk_refresh_at
+    raid = collect_raid()
+    now = int(time.time())
+
+    # During heavy IO, smartctl blocks the device queue and can stall the whole app.
+    if disks_io_busy():
+        with _lock:
+            _state["raid"] = raid
+            ug_disks = list(_state.get("ugos_disks") or [])
+            host_temps = list(_state.get("disk_temps") or [])
+            if ug_disks:
+                _state["disk_temps"] = (
+                    merge_disk_temps(host_temps, ug_disks)
+                    if host_temps
+                    else ugos_disks_to_temps(ug_disks)
+                )
+            kept = list(_state.get("disk_temps") or [])
+        n_temp = sum(1 for d in kept if d.get("temp_c") is not None)
+        append_log(
+            f"Storage refresh ({reason}): skipped SMART — disks busy "
+            f"(kept {n_temp} last temps)"
+        )
+        return
+
+    disks = collect_disk_temps()
+    with _lock:
+        old_temps = list(_state.get("disk_temps") or [])
+        ug_disks = list(_state.get("ugos_disks") or [])
+    disks = _keep_last_disk_temps(disks, old_temps)
+    if ug_disks:
+        disks = merge_disk_temps(disks, ug_disks)
+    with _lock:
+        _state["raid"] = raid
+        _state["disk_temps"] = disks
+        _state["disk_temps_updated"] = now
+    _last_disk_refresh_at = float(now)
+    n_temp = sum(1 for d in disks if d.get("temp_c") is not None)
+    append_log(f"Storage refresh ({reason}): {len(disks)} disks, {n_temp} with temp_c")
+
+
 def _run_full_refresh() -> None:
-    """Immediate collect when UI opens after idle — temps/fans/disks without waiting."""
+    """UI wake: light metrics + UGOS only. No SMART / docker stats (those hang under load)."""
     append_log("Monitor wake — full refresh")
     try:
         bundle = collect_light_tick(include_hw_sensors=True)
@@ -135,32 +221,28 @@ def _run_full_refresh() -> None:
         append_log(f"Wake host refresh error: {ex}")
     try:
         raid = collect_raid()
-        disks = collect_disk_temps()
-        with _lock:
-            ug_disks = list(_state.get("ugos_disks") or [])
-        if ug_disks:
-            disks = merge_disk_temps(disks, ug_disks)
         with _lock:
             _state["raid"] = raid
-            _state["disk_temps"] = disks
-            _state["disk_temps_updated"] = int(time.time())
+            ug_disks = list(_state.get("ugos_disks") or [])
+            host_temps = list(_state.get("disk_temps") or [])
+            if ug_disks:
+                _state["disk_temps"] = (
+                    merge_disk_temps(host_temps, ug_disks)
+                    if host_temps
+                    else ugos_disks_to_temps(ug_disks)
+                )
+        # SMART only if interval due AND disks not busy — never block wake on smartctl.
+        if _disk_interval_due() and not disks_io_busy():
+            _refresh_storage(reason="wake")
+        else:
+            append_log("Storage refresh (wake): light only (interval/busy)")
     except Exception as ex:
         append_log(f"Wake storage refresh error: {ex}")
     try:
-        with _lock:
-            host_ifaces = list(_state.get("ifaces") or [])
-        ugos = fetch_ugos_metrics(force=True)
-        if ugos and ugos.get("ok"):
-            _apply_ugos(ugos, host_ifaces)
-        else:
-            _mark_ugos_fallback()
-    except Exception as ex:
-        append_log(f"Wake UGOS error: {ex}")
-    try:
-        dk = collect_docker(live_stats=True)
+        # List only — docker stats can hang for a long time under load.
+        dk = collect_docker(live_stats=False)
         with _lock:
             _state["docker"] = dk.get("containers", [])
-            _state["docker_df"] = dk.get("system_df", {})
     except Exception as ex:
         append_log(f"Wake docker error: {ex}")
     try:
@@ -205,8 +287,16 @@ def _apply_tick(
     ram = parse_ram_pct(bundle.get("mem", ""))
     volumes = parse_volumes(df_text) if df_text else None
     phys = physical_ifaces(bundle.get("net", ""))
-    ip_info = parse_ip_addr(bundle.get("ipj", ""), phys)
+    try:
+        ip_info = fill_iface_meta(parse_ip_addr(bundle.get("ipj", ""), phys))
+    except Exception:
+        ip_info = parse_ip_addr(bundle.get("ipj", ""), phys)
     _gw, def_dev = parse_default_route_dev(bundle.get("rtj", ""))
+    if not def_dev:
+        try:
+            _gw, def_dev = parse_proc_default_route()
+        except Exception:
+            _gw, def_dev = "", ""
     ifaces_out: list[dict[str, Any]] = []
     for ifn, (rx, tx) in phys.items():
         pr = _prev_net.get(ifn)
@@ -228,23 +318,31 @@ def _apply_tick(
             "default_route": ifn == def_dev,
             "gateway": _gw if ifn == def_dev else "",
         })
+    filtered = [i for i in ifaces_out if not is_docker_bridge_iface(i)]
+    if filtered:
+        ifaces_out = filtered
     load_parts = bundle.get("load", "").strip().split()
     load_s = f"{load_parts[0]} {load_parts[1]} {load_parts[2]}" if len(load_parts) >= 3 else ""
     cpu_temp = parse_cpu_temp_c(bundle.get("temp", "")) if update_hw else None
     fans = parse_fan_rpms(bundle.get("fan", "")) if update_hw else None
     with _lock:
         _state["ok"] = True
-        _state["cpu"] = round(cpu, 1) if cpu is not None else None
-        _state["ram"] = round(ram, 1) if ram is not None else None
+        # Keep last good values if this tick failed to parse (empty /proc, race, etc.)
+        if cpu is not None:
+            _state["cpu"] = round(cpu, 1)
+        if ram is not None:
+            _state["ram"] = round(ram, 1)
         if update_hw and cpu_temp is not None:
             _state["cpu_temp_c"] = cpu_temp
         if update_hw and fans is not None:
             _state["fans"] = [{"label": a, "rpm": b} for a, b in fans]
             _state["fan_count"] = len(fans)
-        _state["load"] = load_s
+        if load_s:
+            _state["load"] = load_s
         if volumes is not None:
             _state["volumes"] = merge_volumes(volumes, last_ugos_volumes())
-        _state["ifaces"] = ifaces_out
+        if ifaces_out:
+            _state["ifaces"] = ifaces_out
         _push_hist("cpu", cpu)
         _push_hist("ram", ram)
 
@@ -320,32 +418,49 @@ def _mark_ugos_fallback() -> None:
 
 
 def _disk_raid_loop() -> None:
-    """Dedicated loop — smartctl can run longer than the UI poll interval."""
+    """Dedicated loop — smartctl respects disk_poll_interval_sec (not UI 3s polls)."""
     append_log("Disk/RAID monitor started")
     while _running:
         if not _clients_active():
             _wait_while_idle()
             continue
         try:
-            raid = collect_raid()
-            disks = collect_disk_temps()
-            with _lock:
-                ug_disks = list(_state.get("ugos_disks") or [])
-            if ug_disks:
-                disks = merge_disk_temps(disks, ug_disks)
-            with _lock:
-                _state["raid"] = raid
-                _state["disk_temps"] = disks
-                _state["disk_temps_updated"] = int(time.time())
-            append_log(f"Storage refresh: {len(disks)} disk temps")
+            _refresh_storage(reason="poll")
         except Exception as ex:
             append_log(f"Storage refresh error: {ex}")
         interval = get_disk_poll_interval_sec()
-        for _ in range(int(interval * 10)):
-            if not _running or not _clients_active() or _client_wake.is_set():
+        # Do NOT abort on _client_wake — every UI /api/snapshot sets that every ~3s.
+        # Only stop early when the app stops or the UI goes idle (pause background SMART).
+        deadline = time.time() + max(1, interval)
+        while _running and time.time() < deadline:
+            if not _clients_active():
                 break
-            time.sleep(0.1)
-        _client_wake.clear()
+            time.sleep(0.5)
+
+
+def _ugos_loop() -> None:
+    """UGOS Web-API in its own thread — must not stall CPU/RAM/network ticks."""
+    append_log("UGOS API monitor started")
+    while _running:
+        if not _clients_active():
+            _wait_while_idle()
+            continue
+        try:
+            with _lock:
+                host_ifaces = list(_state.get("ifaces") or [])
+            ugos = fetch_ugos_metrics()
+            if ugos and ugos.get("ok") and not ugos.get("cached"):
+                _apply_ugos(ugos, host_ifaces)
+            elif ugos and ugos.get("cached"):
+                with _lock:
+                    _state["ugos_ok"] = True
+                    _state["data_source"] = "ugos"
+            else:
+                _mark_ugos_fallback()
+        except Exception as ex:
+            append_log(f"UGOS monitor error: {ex}")
+            _mark_ugos_fallback()
+        time.sleep(ACTIVE_TICK_SEC)
 
 
 def _loop() -> None:
@@ -378,27 +493,9 @@ def _loop() -> None:
             host_ok = True
         except Exception as ex:
             append_log(f"Monitor host tick error: {ex}")
-            with _lock:
-                _state["ok"] = False
+            # Keep last metrics — never blank the UI on a transient host-tick failure.
 
         if host_ok:
-            host_ifaces: list[dict[str, Any]] = []
-            with _lock:
-                host_ifaces = list(_state.get("ifaces") or [])
-            try:
-                ugos = fetch_ugos_metrics()
-                if ugos and ugos.get("ok") and not ugos.get("cached"):
-                    _apply_ugos(ugos, host_ifaces)
-                elif ugos and ugos.get("cached"):
-                    with _lock:
-                        _state["ugos_ok"] = True
-                        _state["data_source"] = "ugos"
-                else:
-                    _mark_ugos_fallback()
-            except Exception as ex:
-                append_log(f"Monitor UGOS tick error: {ex}")
-                _mark_ugos_fallback()
-
             if tick % DOCKER_LIST_EVERY_N == 1:
                 try:
                     live = tick % DOCKER_STATS_EVERY_N == 1
@@ -433,13 +530,36 @@ def _loop() -> None:
 
 
 def snapshot() -> dict[str, Any]:
+    """Fast in-memory snapshot. Must not do disk I/O or wait forever on locks."""
     import copy
 
-    with _lock:
+    global _published
+    # Avoid hanging the HTTP thread if a monitor update holds the lock too long.
+    if not _lock.acquire(timeout=1.5):
+        if _published:
+            snap = copy.deepcopy(_published)
+            snap["ok"] = True
+            return snap
+        return {
+            "ok": False,
+            "cpu": None,
+            "ram": None,
+            "data_source": "host",
+            "ugos_error": "snapshot_lock_timeout",
+            "disk_settings": dict(_state.get("disk_settings") or {}),
+            "volumes": [],
+            "disk_temps": [],
+            "ifaces": [],
+            "docker": [],
+            "history": {"cpu": [], "ram": [], "ts": []},
+        }
+    try:
         snap = copy.deepcopy(_state)
-    from settings import settings_for_api
-
-    snap["disk_settings"] = settings_for_api()
+    finally:
+        _lock.release()
+    if not snap.get("disk_settings"):
+        snap["disk_settings"] = {}
+    _published = snap
     return snap
 
 
@@ -448,7 +568,9 @@ def start_monitor() -> None:
     if _running:
         return
     _running = True
+    sync_disk_settings_cache()
     threading.Thread(target=_disk_raid_loop, daemon=True, name="stats-disk").start()
+    threading.Thread(target=_ugos_loop, daemon=True, name="stats-ugos").start()
     threading.Thread(target=_loop, daemon=True, name="stats-monitor").start()
 
 

@@ -17,16 +17,22 @@ def set_progress(
     percent: int,
     message: str,
     indeterminate: bool = False,
+    message_key: str | None = None,
+    message_params: dict[str, Any] | None = None,
 ) -> None:
     pct = max(0, min(100, int(percent)))
     with _lock:
-        _state[job_id] = {
+        row: dict[str, Any] = {
             "phase": phase,
             "percent": pct,
             "message": message,
             "indeterminate": bool(indeterminate),
             "updated_at": time.time(),
         }
+        if message_key:
+            row["message_key"] = message_key
+            row["message_params"] = dict(message_params or {})
+        _state[job_id] = row
 
 
 def clear_progress(job_id: str) -> None:

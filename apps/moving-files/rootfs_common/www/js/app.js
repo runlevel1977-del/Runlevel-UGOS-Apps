@@ -1694,7 +1694,15 @@
   }
 
   syncAutoTimeField();
+  if (typeof fillLangSelect === "function") fillLangSelect();
   applyI18n();
+  const langSel = document.getElementById("lang-select");
+  if (langSel) {
+    langSel.addEventListener("change", () => {
+      setLang(langSel.value);
+      renderAll();
+    });
+  }
   document.querySelectorAll(".lang-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       setLang(btn.getAttribute("data-lang"));

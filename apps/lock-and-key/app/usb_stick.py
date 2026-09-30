@@ -61,10 +61,12 @@ def wipe_mount_contents(mount: Path) -> None:
 
 
 def _format_partition(part_dev: str, mount: Path) -> bool:
+    from i18n import I18nError
+
     if not _PART.match(Path(part_dev).name):
-        raise ValueError("refusing to format: not a USB partition")
+        raise I18nError("err.usb_refuse_format")
     if not device_is_usb_transport(part_dev):
-        raise ValueError("refusing to format: not a USB device")
+        raise I18nError("err.usb_refuse_format")
 
     rc, _ = _run_rc(["umount", str(mount)], timeout=20.0)
     if rc != 0:
@@ -103,23 +105,26 @@ def prepare_usb_stick_for_vault(row: dict[str, Any], vault_id: str) -> Path:
     Wipe/format removable USB media, then leave it empty for a single key file.
     One stick must not serve multiple vaults (checked via USB serial when known).
     """
+    from i18n import I18nError
+
     mount = Path(row.get("mount") or "")
     if not mount.is_dir():
-        raise ValueError("USB mount not available")
+        raise I18nError("err.usb_mount_missing")
 
     serial = (row.get("usb_serial") or "").strip()
     other = vault_bound_to_usb_serial(serial, exclude_vault_id=vault_id)
     if other:
-        raise ValueError(
-            f"USB stick already used by vault “{other.get('name') or other.get('id')}”"
+        raise I18nError(
+            "err.usb_bound_other",
+            name=str(other.get("name") or other.get("id") or "?"),
         )
 
     device = (row.get("device") or "").strip()
     part_dev = device_path_for_mount(mount, device)
     if not part_dev.startswith("/dev/"):
-        raise ValueError("USB partition device not found")
+        raise I18nError("err.usb_mount_missing")
     if not device_is_usb_transport(part_dev):
-        raise ValueError("refusing to prepare: not a USB device")
+        raise I18nError("err.usb_refuse_format")
 
     if not _format_partition(part_dev, mount):
         wipe_mount_contents(mount)
@@ -132,6 +137,6 @@ def prepare_usb_stick_for_vault(row: dict[str, Any], vault_id: str) -> Path:
             pass
 
     if list_lockkey_files(mount):
-        raise ValueError("could not clear old key files from USB stick")
+        raise I18nError("err.usb_clear_keys")
 
     return mount

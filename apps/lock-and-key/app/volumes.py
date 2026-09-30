@@ -113,7 +113,7 @@ def normalize_volume_id(volume_id: str | None) -> str:
 
 
 def resolve_local_path(volume_id: str, subpath: str) -> Path:
-    from i18n import get_lang, t
+    from i18n import I18nError
 
     vid = normalize_volume_id(volume_id)
     rel = (subpath or "").strip().strip("/")
@@ -124,9 +124,9 @@ def resolve_local_path(volume_id: str, subpath: str) -> Path:
                 base = mp
                 target = (base / rel).resolve() if rel else base.resolve()
                 if not str(target).startswith(str(base.resolve())):
-                    raise ValueError("invalid path")
+                    raise I18nError("err.invalid_path")
                 return target
-        raise ValueError(t("err.usb_not_mounted", get_lang(), id=vid))
+        raise I18nError("err.usb_not_mounted", id=vid)
     for v, mount, _ in _configured_volumes():
         if v == vid and mount.is_dir():
             base = mount
@@ -136,11 +136,11 @@ def resolve_local_path(volume_id: str, subpath: str) -> Path:
             except OSError as exc:
                 raise ValueError(str(exc)) from exc
             if not str(target).startswith(str(base_resolved)):
-                raise ValueError("invalid path")
+                raise I18nError("err.invalid_path")
             if not target.is_dir():
-                raise ValueError("not a directory")
+                raise I18nError("err.not_directory")
             return target
-    raise ValueError(t("err.no_storage", get_lang()))
+    raise I18nError("err.no_storage")
 
 
 def seal_scan_roots() -> list[tuple[str, Path]]:

@@ -39,7 +39,7 @@ def stop_plan(plan_id: str, lang: str | None = None) -> tuple[bool, str]:
         if plan_id not in _running_ids:
             return False, t("err.plan_not_running", lng)
     request_cancel(plan_id)
-    set_job(plan_id, detail=t("plan.stopping", lng))
+    set_job(plan_id, detail=t("plan.stopping", lng), detail_key="plan.stopping")
     append_log(f"PLAN stop requested {plan_id}")
     return True, t("plan.stop_requested", lng)
 
@@ -220,6 +220,8 @@ def start_plan(plan_id: str, lang: str | None = None, *, manual: bool = False) -
             last_run_date=today,
             last_status="running",
             last_message=t("plan.running", lng),
+            last_message_key="plan.running",
+            last_message_params={},
         )
         name = plan.get("name", plan_id)
         route = f"{endpoint_label(plan.get('source') or {})} → {endpoint_label(plan.get('dest') or {})}"
@@ -230,7 +232,7 @@ def start_plan(plan_id: str, lang: str | None = None, *, manual: bool = False) -
             return is_cancelled(plan_id)
 
         try:
-            set_job(plan_id, phase="wol", detail=t("jobs.phase.wol", lng), percent=0, speed="", eta="")
+            set_job(plan_id, phase="wol", detail=t("jobs.phase.wol", lng), detail_key="jobs.phase.wol", percent=0, speed="", eta="")
             wake_ok, wake_msg = send_wol(
                 plan.get("target_mac", ""),
                 plan.get("wake_broadcast") or None,
@@ -239,18 +241,38 @@ def start_plan(plan_id: str, lang: str | None = None, *, manual: bool = False) -
             append_log(f"WOL {'OK' if wake_ok else 'FAIL'}: {wake_msg}")
             if _cancelled():
                 msg = t("plan.cancelled", lng)
-                update_plan(plan_id, last_status="cancelled", last_message=msg)
-                finish_job(plan_id, status="cancelled", message=msg, lang=lng)
+                update_plan(
+                    plan_id,
+                    last_status="cancelled",
+                    last_message=msg,
+                    last_message_key="plan.cancelled",
+                    last_message_params={},
+                )
+                finish_job(plan_id, status="cancelled", message=msg, message_key="plan.cancelled", lang=lng)
                 return
             if not wake_ok:
-                msg = t("plan.fail_wol", lng, detail=wake_msg[:200])
-                update_plan(plan_id, last_status="fail", last_message=msg)
-                finish_job(plan_id, status="error", message=msg, lang=lng)
+                detail = wake_msg[:200]
+                msg = t("plan.fail_wol", lng, detail=detail)
+                update_plan(
+                    plan_id,
+                    last_status="fail",
+                    last_message=msg,
+                    last_message_key="plan.fail_wol",
+                    last_message_params={"detail": detail},
+                )
+                finish_job(
+                    plan_id,
+                    status="error",
+                    message=msg,
+                    message_key="plan.fail_wol",
+                    message_params={"detail": detail},
+                    lang=lng,
+                )
                 notify_event(name, route, msg, lng, success=False)
                 return
 
             wait_min = max(1, min(120, int(plan.get("ready_wait_minutes") or 20)))
-            set_job(plan_id, phase="wait", detail=t("jobs.phase.wait", lng), percent=0, speed="", eta="")
+            set_job(plan_id, phase="wait", detail=t("jobs.phase.wait", lng), detail_key="jobs.phase.wait", percent=0, speed="", eta="")
             ready_ok, ready_msg = wait_for_host(
                 plan.get("target_ip", ""),
                 int(plan.get("ready_port") or 445),
@@ -260,13 +282,33 @@ def start_plan(plan_id: str, lang: str | None = None, *, manual: bool = False) -
             append_log(f"READY {'OK' if ready_ok else 'FAIL'}: {ready_msg}")
             if _cancelled() or ready_msg == "cancelled":
                 msg = t("plan.cancelled", lng)
-                update_plan(plan_id, last_status="cancelled", last_message=msg)
-                finish_job(plan_id, status="cancelled", message=msg, lang=lng)
+                update_plan(
+                    plan_id,
+                    last_status="cancelled",
+                    last_message=msg,
+                    last_message_key="plan.cancelled",
+                    last_message_params={},
+                )
+                finish_job(plan_id, status="cancelled", message=msg, message_key="plan.cancelled", lang=lng)
                 return
             if not ready_ok:
-                msg = t("plan.fail_wait", lng, detail=ready_msg[:200])
-                update_plan(plan_id, last_status="fail", last_message=msg)
-                finish_job(plan_id, status="error", message=msg, lang=lng)
+                detail = ready_msg[:200]
+                msg = t("plan.fail_wait", lng, detail=detail)
+                update_plan(
+                    plan_id,
+                    last_status="fail",
+                    last_message=msg,
+                    last_message_key="plan.fail_wait",
+                    last_message_params={"detail": detail},
+                )
+                finish_job(
+                    plan_id,
+                    status="error",
+                    message=msg,
+                    message_key="plan.fail_wait",
+                    message_params={"detail": detail},
+                    lang=lng,
+                )
                 notify_event(name, route, msg, lng, success=False)
                 return
 
@@ -279,27 +321,60 @@ def start_plan(plan_id: str, lang: str | None = None, *, manual: bool = False) -
             )
             if _cancelled() or code == "cancelled":
                 msg = t("plan.cancelled", lng)
-                update_plan(plan_id, last_status="cancelled", last_message=msg)
-                finish_job(plan_id, status="cancelled", message=msg, lang=lng)
+                update_plan(
+                    plan_id,
+                    last_status="cancelled",
+                    last_message=msg,
+                    last_message_key="plan.cancelled",
+                    last_message_params={},
+                )
+                finish_job(plan_id, status="cancelled", message=msg, message_key="plan.cancelled", lang=lng)
                 append_log(f"PLAN {plan_id} CANCELLED")
                 return
             if ok:
                 msg = t("plan.ok", lng)
-                update_plan(plan_id, last_status="ok", last_message=msg, last_details=details)
+                update_plan(
+                    plan_id,
+                    last_status="ok",
+                    last_message=msg,
+                    last_message_key="plan.ok",
+                    last_message_params={},
+                    last_details=details,
+                )
                 append_log(f"PLAN {plan_id} OK")
-                finish_job(plan_id, status="ok", message=msg, lang=lng)
+                finish_job(plan_id, status="ok", message=msg, message_key="plan.ok", lang=lng)
                 notify_event(name, route, msg, lng, success=True)
             else:
                 tail = (details.get("tail") or code)[:300]
                 msg = t("plan.fail_sync", lng, detail=tail)
-                update_plan(plan_id, last_status="fail", last_message=msg, last_details=details)
+                update_plan(
+                    plan_id,
+                    last_status="fail",
+                    last_message=msg,
+                    last_message_key="plan.fail_sync",
+                    last_message_params={"detail": tail},
+                    last_details=details,
+                )
                 append_log(f"PLAN {plan_id} FAIL: {msg}")
-                finish_job(plan_id, status="error", message=msg, lang=lng)
+                finish_job(
+                    plan_id,
+                    status="error",
+                    message=msg,
+                    message_key="plan.fail_sync",
+                    message_params={"detail": tail},
+                    lang=lng,
+                )
                 notify_event(name, route, msg, lng, success=False)
         except Exception as ex:
             err = str(ex)[:400]
             append_log(f"PLAN {plan_id} ERROR: {ex}")
-            update_plan(plan_id, last_status="fail", last_message=err)
+            update_plan(
+                plan_id,
+                last_status="fail",
+                last_message=err,
+                last_message_key="",
+                last_message_params={},
+            )
             finish_job(plan_id, status="error", message=err, lang=lng)
             notify_event(name, route, err, lng, success=False)
         finally:

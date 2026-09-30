@@ -5,11 +5,12 @@ RUN apk add --no-cache rsync bash tzdata python3 py3-flask py3-cryptography samb
 WORKDIR /app
 COPY app/ /app/
 RUN python3 -m compileall -q /app
-ENV RUNLEVEL_APPS_REPO=https://github.com/runlevel1977-del/Runlevel-UGOS-Apps \
+ENV LANG=C.UTF-8 PYTHONIOENCODING=utf-8 \
+    RUNLEVEL_APPS_REPO=https://github.com/runlevel1977-del/Runlevel-UGOS-Apps \
     RUNLEVEL_PRIVACY_SLUG=backupverifier \
     RUNLEVEL_CREDENTIAL_CONSENT=1
 ENV BACKUP_VERIFIER_DATA=/data \
-    BACKUP_VERIFIER_VERSION=0.3.14 \
+    BACKUP_VERIFIER_VERSION=0.3.24 \
     TZ=Europe/Berlin
 EXPOSE 8080
 VOLUME ["/data"]

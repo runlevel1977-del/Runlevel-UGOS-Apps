@@ -5,11 +5,12 @@ RUN apk add --no-cache bash coreutils tzdata python3 py3-flask py3-cryptography 
 WORKDIR /app
 COPY app/ /app/
 RUN python3 -m compileall -q /app
-ENV RUNLEVEL_APPS_REPO=https://github.com/runlevel1977-del/Runlevel-UGOS-Apps \
+ENV LANG=C.UTF-8 PYTHONIOENCODING=utf-8 \
+    RUNLEVEL_APPS_REPO=https://github.com/runlevel1977-del/Runlevel-UGOS-Apps \
     RUNLEVEL_PRIVACY_SLUG=securityhub \
-    RUNLEVEL_CREDENTIAL_CONSENT=0
+    RUNLEVEL_CREDENTIAL_CONSENT=1
 ENV SECURITY_HUB_DATA=/data \
-    SECURITY_HUB_VERSION=0.1.12 \
+    SECURITY_HUB_VERSION=0.1.20 \
     HOST_VAR_LOG=/host/var/log \
     HOST_UGREEN_LOG=/host/ugreen/log \
     TZ=Europe/Berlin

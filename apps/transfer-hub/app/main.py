@@ -10,20 +10,25 @@ from compliance import (
     save_privacy_consent,
 )
 from flask import Flask, g, jsonify, make_response, render_template, request
+from ugos_auth import init_ugos_auth
+from transport_rsa import decrypt_oaep
+from rate_limit import allow as rate_allow
 
 from devices import (
     LOCAL_ID,
     add_smb_device,
     browse,
     delete_device,
+    device_public_row,
     endpoint_label,
+    endpoint_path_list,
     get_device,
     load_devices,
     test_smb,
 )
 from jobs import list_active_jobs, start_profile_run, start_scheduler
 from icon_sync import sync_appcenter_icon
-from i18n import LANG_COOKIE, bundle, get_lang, lang_from_request, normalize_lang, t
+from i18n import LANG_COOKIE, LANG_LABELS, bundle, get_lang, lang_from_request, normalize_lang, t
 from network_scan import probe_host, scan_config, scan_lan
 from schedule_util import normalize_schedule_fields, schedule_label
 from volumes import list_volumes
@@ -38,8 +43,9 @@ from store import (
 )
 
 app = Flask(__name__)
+init_ugos_auth(app)
 NAS_MOUNT = os.environ.get("NAS_MOUNT", "/mnt/nas")
-APP_VERSION = os.environ.get("TRANSFER_HUB_VERSION", "0.6.26")
+APP_VERSION = os.environ.get("TRANSFER_HUB_VERSION", "0.6.35")
 NAS_ADMIN_URL = os.environ.get(
     "NAS_ADMIN_URL",
     "https://github.com/runlevel1977-del/UgreenNASAdmin/releases/latest",
@@ -63,6 +69,20 @@ def _lang_cookie_response(resp, lang: str):
     return resp
 
 
+def _decrypt_password_fields(obj: dict, *keys: str) -> None:
+    """Reject plaintext secrets; accept RSA cipher fields (*_enc)."""
+    if not isinstance(obj, dict):
+        return
+    names = keys or ("password",)
+    for name in names:
+        if str(obj.get(name) or "").strip():
+            raise ValueError("plaintext passwords are not accepted")
+        enc = str(obj.get(f"{name}_enc") or "").strip()
+        if enc:
+            obj[name] = decrypt_oaep(DATA_DIR, enc)
+            obj.pop(f"{name}_enc", None)
+
+
 @app.context_processor
 def _inject_i18n():
     lng = getattr(g, "lang", "en")
@@ -74,9 +94,38 @@ def _inject_i18n():
         "lang": lng,
         "t": _t,
         "i18n": bundle(lng),
+        "lang_labels": LANG_LABELS,
         "nas_admin_url": NAS_ADMIN_URL,
         **compliance_context(DATA_DIR),
     }
+
+
+def _normalize_endpoint(ep: dict) -> dict:
+    """Persist endpoints with paths[] (multi-folder source support)."""
+    paths = endpoint_path_list(ep)
+    return {
+        "device_id": ep.get("device_id"),
+        "volume": ep.get("volume") or "",
+        "share": ep.get("share") or "",
+        "path": paths[0] if len(paths) == 1 else "",
+        "paths": paths,
+    }
+
+
+def _validate_source_endpoint(source: dict, lng: str) -> str | None:
+    paths = endpoint_path_list(source)
+    if not paths:
+        return t("err.pick_source_folders", lng)
+    if len(paths) > 1 and any(p == "" for p in paths):
+        return t("err.whole_volume_single", lng)
+    dev = get_device(source.get("device_id", LOCAL_ID))
+    if dev and dev.get("type") == "local" and not source.get("volume") and any(
+        p != "" for p in paths
+    ):
+        return t("err.pick_volume_first", lng)
+    if dev and dev.get("type") == "smb" and not source.get("share"):
+        return t("err.smb_share_missing", lng)
+    return None
 
 
 def _parse_profile_body(
@@ -88,8 +137,8 @@ def _parse_profile_body(
     """Validate profile JSON; return (fields, None) or (None, (error, status))."""
     lng = get_lang()
     name = (body.get("name") or "").strip() or t("profile.default_name", lng)
-    source = body.get("source")
-    dest = body.get("dest")
+    source_raw = body.get("source")
+    dest_raw = body.get("dest")
     auto_sync = bool(body.get("auto_sync"))
     delete_source_after = bool(body.get("delete_source_after"))
     smb_performance = bool(body.get("smb_performance"))
@@ -99,18 +148,24 @@ def _parse_profile_body(
         auto_sync = False
     sched = normalize_schedule_fields(body)
 
-    if not isinstance(source, dict) or not isinstance(dest, dict):
+    if not isinstance(source_raw, dict) or not isinstance(dest_raw, dict):
         return None, (t("err.pick_via_ui", lng), 400)
-    if not source.get("device_id") or not dest.get("device_id"):
+    if not source_raw.get("device_id") or not dest_raw.get("device_id"):
         return None, (t("err.pick_devices", lng), 400)
+
+    source = _normalize_endpoint(source_raw)
+    dest = _normalize_endpoint(dest_raw)
+    src_err = _validate_source_endpoint(source, lng)
+    if src_err:
+        return None, (src_err, 400)
 
     sk = (
         f"{source.get('device_id')}|{source.get('volume') or ''}|"
-        f"{source.get('share')}|{source.get('path')}"
+        f"{source.get('share')}|{'|'.join(endpoint_path_list(source))}"
     )
     dk = (
         f"{dest.get('device_id')}|{dest.get('volume') or ''}|"
-        f"{dest.get('share')}|{dest.get('path')}"
+        f"{dest.get('share')}|{'|'.join(endpoint_path_list(dest))}"
     )
     if sk == dk:
         return None, (t("err.same_endpoints", lng), 400)
@@ -135,7 +190,7 @@ def _parse_profile_body(
 
 @app.route("/health")
 def health():
-    return jsonify({"ok": True, "version": APP_VERSION, "lang": get_lang()})
+    return jsonify({"ok": True})
 
 
 @app.route("/")
@@ -157,7 +212,7 @@ def api_set_lang():
     body = request.get_json(force=True, silent=True) or {}
     picked = normalize_lang(body.get("lang"))
     if not picked:
-        return jsonify({"ok": False, "error": "lang must be de or en"}), 400
+        return jsonify({"ok": False, "error": "unsupported lang"}), 400
     resp = jsonify({"ok": True, "lang": picked, "i18n": bundle(picked)})
     return _lang_cookie_response(resp, picked)
 
@@ -165,10 +220,13 @@ def api_set_lang():
 @app.route("/api/devices", methods=["GET"])
 def api_devices():
     devices = load_devices()
+    out = []
     for d in devices:
+        row = device_public_row(d.copy())
         if d.get("id") == LOCAL_ID:
-            d["name"] = t("device.this_nas", get_lang())
-    return jsonify(devices)
+            row["name"] = t("device.this_nas", get_lang())
+        out.append(row)
+    return jsonify(out)
 
 
 @app.route("/api/config", methods=["GET"])
@@ -205,11 +263,17 @@ def api_probe_host():
 
 @app.route("/api/devices", methods=["POST"])
 def api_add_device():
-
     if not has_privacy_consent(DATA_DIR):
         body, code = consent_required_response()
         return jsonify(body), code
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    if not rate_allow("devices", ip, max_n=10, window_sec=300):
+        return jsonify({"ok": False, "error": "Too many attempts, try later"}), 429
     body = request.get_json(force=True, silent=True) or {}
+    try:
+        _decrypt_password_fields(body, "password")
+    except ValueError:
+        return jsonify({"ok": False, "error": "Encrypted password required"}), 400
     host = (body.get("host") or "").strip()
     name = (body.get("name") or host).strip()
     user = (body.get("username") or "").strip()
@@ -221,7 +285,7 @@ def api_add_device():
         return jsonify({"ok": False, "error": msg}), 400
     dev = add_smb_device(name, host, user, password)
     append_log(f"Gerät gespeichert: {name} ({host})")
-    return jsonify({"ok": True, "device": {**dev, "password": "***"}})
+    return jsonify({"ok": True, "device": device_public_row(dev)})
 
 
 @app.route("/api/devices/<device_id>", methods=["DELETE"])
@@ -351,7 +415,9 @@ def api_privacy_status():
 
 @app.route("/api/privacy/consent", methods=["POST"])
 def api_privacy_consent():
-    row = save_privacy_consent(DATA_DIR)
+    body = request.get_json(force=True, silent=True) or {}
+    accepted = bool(body.get("accepted", True)) and not bool(body.get("declined"))
+    row = save_privacy_consent(DATA_DIR, accepted=accepted)
     return jsonify({"ok": True, "consent": row})
 
 if __name__ == "__main__":

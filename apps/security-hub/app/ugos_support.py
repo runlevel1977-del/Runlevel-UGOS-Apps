@@ -64,7 +64,14 @@ def normalize_ugos_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     port = max(1, min(65535, port))
     user = str(data.get("username") or os.environ.get("UGOS_API_USER") or "").strip()
     pw = str(data.get("password") or os.environ.get("UGOS_API_PASSWORD") or "")
-    host = str(data.get("host") or default_ugos_host()).strip() or default_ugos_host()
+    host = str(data.get("host") or "").strip()
+    # Inside Docker bridge, 127.0.0.1 is the container — rewrite to NAS host.
+    if not host or host in ("127.0.0.1", "localhost"):
+        if not _env_bool("UGOS_API_USE_LOCALHOST", default=False):
+            host = default_ugos_host()
+        else:
+            host = host or "127.0.0.1"
+    host = host or default_ugos_host()
     enabled = data.get("enabled")
     if enabled is None:
         enabled = _env_bool("UGOS_API_ENABLED", default=True)

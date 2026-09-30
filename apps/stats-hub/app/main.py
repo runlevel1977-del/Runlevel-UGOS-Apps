@@ -1,34 +1,52 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import copy
 import os
 import threading
 
 from compliance import (
     compliance_context,
-    consent_required_response,
-    has_privacy_consent,
     save_privacy_consent,
 )
 from flask import Flask, g, jsonify, make_response, render_template, request
+from ugos_auth import init_ugos_auth
 
 from collect import probe_disk_temps, scan_top_folders
-from icon_sync import sync_appcenter_icon
-from i18n import LANG_COOKIE, bundle, get_lang, lang_from_request, normalize_lang, t
-from monitor import set_top_folders, snapshot, start_monitor, touch_client_activity
+from transport_rsa import decrypt_oaep
+from icon_sync import sync_all_runlevel_icons, sync_appcenter_icon
+from i18n import LANG_COOKIE, LANG_LABELS, bundle, get_lang, lang_from_request, normalize_lang, t
+from monitor import (
+    set_top_folders,
+    snapshot,
+    start_monitor,
+    sync_disk_settings_cache,
+    touch_client_activity,
+)
 from settings import INTERVAL_CHOICES, load_settings, save_settings, settings_for_api
 from ugos_poll import reset_ugos_client, test_ugos_connection
 from store import DATA_DIR, append_log, read_log_tail
 
 app = Flask(__name__)
-APP_VERSION = os.environ.get("STATS_HUB_VERSION", "0.2.32")
+init_ugos_auth(app)
+APP_VERSION = os.environ.get("STATS_HUB_VERSION", "0.2.56")
 NAS_ADMIN_URL = os.environ.get(
     "NAS_ADMIN_URL",
     "https://github.com/runlevel1977-del/UgreenNASAdmin/releases/latest",
 )
 _top_lock = threading.Lock()
 _top_busy = False
+
+
+def _decrypt_password_fields(obj: dict) -> None:
+    """Reject plaintext `password`; accept RSA-OAEP `password_enc` only."""
+    if not isinstance(obj, dict):
+        return
+    if str(obj.get("password") or "").strip():
+        raise ValueError("plaintext passwords are not accepted")
+    enc = str(obj.get("password_enc") or "").strip()
+    if enc:
+        obj["password"] = decrypt_oaep(DATA_DIR, enc)
+        obj.pop("password_enc", None)
 
 
 @app.before_request
@@ -52,6 +70,7 @@ def _inject_i18n():
         "lang": lng,
         "t": _t,
         "i18n": bundle(lng),
+        "lang_labels": LANG_LABELS,
         "nas_admin_url": NAS_ADMIN_URL,
         **compliance_context(DATA_DIR),
     }
@@ -59,7 +78,7 @@ def _inject_i18n():
 
 @app.route("/health")
 def health():
-    return jsonify({"ok": True, "version": APP_VERSION})
+    return jsonify({"ok": True})
 
 
 @app.route("/")
@@ -84,8 +103,12 @@ def api_lang():
 
 @app.route("/api/snapshot")
 def api_snapshot():
-    touch_client_activity()
-    snap = copy.deepcopy(snapshot())
+    # Snapshot first (must stay fast). Wake/activity is secondary.
+    snap = snapshot()
+    try:
+        touch_client_activity()
+    except Exception:
+        pass
     return jsonify({"ok": True, "snapshot": snap, "version": APP_VERSION})
 
 
@@ -136,11 +159,18 @@ def api_settings_post():
     if not body:
         return jsonify({"ok": False, "error": "empty"}), 400
     try:
+        if isinstance(body.get("ugos_api"), dict):
+            _decrypt_password_fields(body["ugos_api"])
         saved = save_settings(body)
     except (TypeError, ValueError) as ex:
         return jsonify({"ok": False, "error": str(ex)}), 400
+    sync_disk_settings_cache()
+    # Reset ugos client outside of any monitor lock to avoid deadlock
     if "ugos_api" in body:
-        reset_ugos_client()
+        try:
+            reset_ugos_client()
+        except Exception:
+            pass
     return jsonify({"ok": True, "settings": saved})
 
 
@@ -152,6 +182,10 @@ def api_ugos_test():
     patch = body.get("ugos_api") if isinstance(body.get("ugos_api"), dict) else body
     cfg = dict(cur)
     if isinstance(patch, dict):
+        try:
+            _decrypt_password_fields(patch)
+        except ValueError as ex:
+            return jsonify({"ok": False, "error": str(ex)}), 400
         for key in ("host", "port", "username", "use_https", "verify_ssl", "enabled"):
             if key in patch:
                 cfg[key] = patch[key]
@@ -199,7 +233,11 @@ def api_privacy_status():
 
 @app.route("/api/privacy/consent", methods=["POST"])
 def api_privacy_consent():
-    row = save_privacy_consent(DATA_DIR)
+    body = request.get_json(force=True, silent=True) or {}
+    if "accepted" not in body and "declined" not in body:
+        return jsonify({"ok": False, "error": "missing decision"}), 400
+    accepted = bool(body.get("accepted")) and not bool(body.get("declined"))
+    row = save_privacy_consent(DATA_DIR, accepted=accepted)
     return jsonify({"ok": True, "consent": row})
 
 if __name__ == "__main__":
@@ -207,7 +245,7 @@ if __name__ == "__main__":
     append_log(f"Stats Hub {APP_VERSION} starting on :{port}")
     start_monitor()
     threading.Thread(
-        target=lambda: sync_appcenter_icon("com.runlevel.statshub"),
+        target=lambda: (sync_appcenter_icon("com.runlevel.statshub"), sync_all_runlevel_icons()),
         daemon=True,
         name="sh-icon",
     ).start()

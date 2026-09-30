@@ -5,12 +5,13 @@ RUN apk add --no-cache rsync bash tzdata python3 py3-flask py3-cryptography samb
 WORKDIR /app
 COPY app/ /app/
 RUN python3 -m compileall -q /app
-ENV RUNLEVEL_APPS_REPO=https://github.com/runlevel1977-del/Runlevel-UGOS-Apps \
+ENV LANG=C.UTF-8 PYTHONIOENCODING=utf-8 \
+    RUNLEVEL_APPS_REPO=https://github.com/runlevel1977-del/Runlevel-UGOS-Apps \
     RUNLEVEL_PRIVACY_SLUG=transferhub \
     RUNLEVEL_CREDENTIAL_CONSENT=1
 ENV TRANSFER_HUB_DATA=/data \
     NAS_MOUNT=/mnt/nas \
-    TRANSFER_HUB_VERSION=0.6.26 \
+    TRANSFER_HUB_VERSION=0.6.35 \
     TZ=Europe/Berlin
 EXPOSE 8080
 VOLUME ["/data"]

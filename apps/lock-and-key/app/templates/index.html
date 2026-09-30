@@ -25,8 +25,9 @@
     .warn { color:#fca5a5; font-size:.85rem; }
     pre { background:#0a0e12; padding:.75rem; overflow:auto; max-height:140px; font-size:.75rem; border-radius:6px; }
     .page-header { display:flex; flex-wrap:wrap; justify-content:space-between; gap:1rem; margin-bottom:.75rem; }
-    .lang-switch button { background:#2a3545; color:var(--muted); min-width:2.5rem; }
-    .lang-switch button.active { background:var(--accent2); color:#fff; }
+    .lang-switch { display:flex; flex-direction:column; align-items:flex-end; gap:.35rem; }
+    .lang-label { font-size:.8rem; color:var(--muted); }
+    #lang-select { width:auto; min-width:5.5rem; background:#0a0e12; color:var(--text); border:1px solid var(--border); border-radius:6px; padding:.4rem .55rem; }
     #job-status { min-height:1.2rem; font-size:.85rem; color:var(--accent2); }
     .browse-row { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
     .path-display { font-family:Consolas,monospace; font-size:.8rem; color:var(--muted); }
@@ -49,9 +50,12 @@
       <p class="hint">{{ t('warn.usb_remove') }}</p>
     </div>
     <div class="lang-switch">
-      <span class="hint">{{ t('ui.language') }}</span>
-      <button type="button" class="{% if lang == 'de' %}active{% endif %}" onclick="setLang('de')">DE</button>
-      <button type="button" class="{% if lang == 'en' %}active{% endif %}" onclick="setLang('en')">EN</button>
+      <label class="lang-label" for="lang-select">{{ t('ui.language') }}</label>
+      <select id="lang-select" onchange="setLang(this.value)" aria-label="{{ t('ui.language') }}">
+        {% for code, label in lang_labels.items() %}
+        <option value="{{ code }}" {% if lang == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
     </div>
   </header>
 
@@ -173,10 +177,12 @@
     <pre id="log-box">…</pre>
   </div>
 
+<script src="/static/rsa_http.js"></script>
 <script>
+const I18N = {{ i18n | tojson }};
 let volumes = [];
 let browsePath = '';
-let selectedSealVolume = '1';
+let selectedSealVolume = '';
 let browseSeq = 0;
 let sealTargetPath = null;
 let sealTargetHostPath = '';
@@ -190,6 +196,39 @@ let lastVaultId = '';
 let lastDownloadUrl = '';
 let usbDevices = [];
 let vaultRows = [];
+
+function tr(key, fmt) {
+  let s = I18N[key] || key;
+  if (fmt) for (const k of Object.keys(fmt)) s = s.replaceAll('{' + k + '}', String(fmt[k]));
+  return s;
+}
+
+function apiErrorText(data) {
+  if (!data) return tr('job.error');
+  if (data.error_key) return tr(data.error_key, data.error_params || {});
+  return data.error || tr('job.error');
+}
+
+function jobErrorText(job) {
+  if (!job) return '?';
+  if (job.error_key) return tr(job.error_key, job.error_params || {});
+  return job.error || '?';
+}
+
+async function encryptSecret(plain) {
+  if (!plain) return '';
+  if (typeof window.rlEncryptSecret !== 'function') {
+    throw new Error('encryption unavailable');
+  }
+  return window.rlEncryptSecret(plain);
+}
+
+async function encryptPayload(bytes) {
+  if (typeof window.rlEncryptPayload !== 'function') {
+    throw new Error('encryption unavailable');
+  }
+  return window.rlEncryptPayload(bytes);
+}
 
 function usbStickLabel(r) {
   const name = (r.stick_name || r.model || r.fs_label || r.mount || '?').trim();
@@ -278,10 +317,13 @@ async function api(path, opts={}) {
   return r.json();
 }
 
-function setLang(lang) {
-  const u = new URL(location.href);
-  u.searchParams.set('lang', lang);
-  location.href = u.toString();
+async function setLang(lang) {
+  const r = await fetch('/api/lang', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lang }),
+  });
+  if (r.ok) location.reload();
 }
 
 function statusLabel(s) {
@@ -297,18 +339,23 @@ async function loadVolumes() {
   const data = await api('/api/volumes');
   volumes = data.volumes || [];
   const sealVol = document.getElementById('seal-volume');
-  const prev = selectedSealVolume || sealVol.value || '1';
+  if (!volumes.length) {
+    sealVol.innerHTML = '';
+    document.getElementById('seal-browse-path').textContent = '{{ t("err.no_storage") }}';
+    return;
+  }
+  const prev = selectedSealVolume || sealVol.value || '';
   sealVol.innerHTML = volumes.map(v => `<option value="${v.id}">${v.label}</option>`).join('');
   if (prev && volumes.some(v => v.id === prev)) {
     sealVol.value = prev;
   } else if (volumes.some(v => v.id === '1')) {
     sealVol.value = '1';
-  } else if (volumes.length) {
+  } else {
     sealVol.value = volumes[0].id;
   }
-  selectedSealVolume = sealVol.value || '1';
+  selectedSealVolume = sealVol.value || volumes[0].id;
   sealVol.onchange = () => {
-    selectedSealVolume = sealVol.value || '1';
+    selectedSealVolume = sealVol.value || volumes[0].id;
     browsePath = '';
     sealTargetPath = null;
     sealTargetHostPath = '';
@@ -367,7 +414,7 @@ async function loadBrowse() {
   const data = await api(`/api/browse?volume=${encodeURIComponent(vol)}&path=${encodeURIComponent(path)}`);
   if (seq !== browseSeq) return;
   if (!data.ok) {
-    alert(data.error || 'browse error');
+    alert(apiErrorText(data));
     return;
   }
   const respVol = data.volume || vol;
@@ -500,22 +547,23 @@ async function pollJob(jobId) {
       return msg;
     }
     if (job.status === 'error') {
-      const err = job.error || '?';
-      const verifyFail = String(err).toLowerCase().includes('integrity check');
-      const partial = String(err).toLowerCase().includes('partially sealed');
+      const err = jobErrorText(job);
+      const key = job.error_key || '';
+      const verifyFail = key === 'err.verify_fail_detail' || String(job.error || '').toLowerCase().includes('integrity check');
+      const partial = key === 'err.folder_partial' || String(job.error || '').toLowerCase().includes('partially sealed');
       const sealSafe = job.kind === 'seal' && !partial;
       const unlockSafe = job.kind === 'unlock';
-      const safeMsg = sealSafe ? '{{ t("job.seal_failed_safe") }} ' : (unlockSafe ? '{{ t("job.unlock_failed_safe") }} ' : '');
+      const safeMsg = sealSafe ? tr('job.seal_failed_safe') + ' ' : (unlockSafe ? tr('job.unlock_failed_safe') + ' ' : '');
       el.textContent = verifyFail
-        ? '{{ t("job.verify_fail") }}: ' + err
-        : safeMsg + '{{ t("job.error") }}: ' + err;
+        ? (key === 'err.verify_fail_detail' ? err : (tr('job.verify_fail') + ': ' + err))
+        : safeMsg + tr('job.error') + ': ' + err;
       el.style.color = '#f87171';
       return '';
     }
-    if (job.last) el.textContent = '{{ t("job.running") }} ' + job.last;
+    if (job.last) el.textContent = tr('job.running') + ' ' + job.last;
     await new Promise(r => setTimeout(r, 1000));
   }
-  el.textContent = '{{ t("job.error") }}: timeout';
+  el.textContent = tr('job.error') + ': ' + tr('job.timeout');
   el.style.color = '#f87171';
   return '';
 }
@@ -533,10 +581,15 @@ async function sealFolder() {
     path: sealTargetPath,
     bind_usb: bind,
     usb_volume: usbVol,
-    key_passphrase,
   };
+  try {
+    if (key_passphrase) body.key_passphrase_enc = await encryptSecret(key_passphrase);
+  } catch (e) {
+    alert('{{ t("job.error") }}');
+    return;
+  }
   const data = await api('/api/vaults/seal', {method:'POST', body: JSON.stringify(body)});
-  if (!data.ok) { alert(data.error || 'error'); return; }
+  if (!data.ok) { alert(apiErrorText(data)); return; }
   lastVaultId = data.vault.id;
   lastDownloadUrl = data.download_url;
   document.getElementById('btn-download-key').style.display = 'inline-block';
@@ -559,7 +612,7 @@ async function deleteVault(id) {
     method: 'DELETE',
     body: JSON.stringify({force: locked}),
   });
-  if (!data.ok) { alert(data.error || 'error'); return; }
+  if (!data.ok) { alert(apiErrorText(data)); return; }
   await refreshVaults();
   await refreshLog();
 }
@@ -584,7 +637,7 @@ async function writeKeyUsb(skipConfirm, prefixMsg) {
     body: JSON.stringify({usb_volume: usbVol})
   });
   if (!data.ok) {
-    setStatus((prefixMsg ? prefixMsg + ' — ' : '') + '{{ t("job.error") }}: ' + (data.error || '?'), true);
+    setStatus((prefixMsg ? prefixMsg + ' — ' : '') + '{{ t("job.error") }}: ' + apiErrorText(data), true);
     return false;
   }
   const keyMsg = '{{ t("usb.key_written") }}'.replace('{path}', data.path || '');
@@ -593,47 +646,58 @@ async function writeKeyUsb(skipConfirm, prefixMsg) {
   return true;
 }
 
-async function readUploadKeyB64() {
+async function readUploadKeyEnc() {
   const file = document.getElementById('key-upload').files[0];
   if (!file) return null;
   const buf = await file.arrayBuffer();
-  const bytes = new Uint8Array(buf);
-  let bin = '';
-  bytes.forEach(b => bin += String.fromCharCode(b));
-  return btoa(bin);
+  return encryptPayload(new Uint8Array(buf));
 }
 
 async function unlockVault(upload) {
   const vaultId = document.getElementById('action-vault').value;
-  const body = { key_passphrase: unlockKeyPassphrase() };
-  if (upload) {
-    const key_b64 = await readUploadKeyB64();
-    if (!key_b64) { alert('no file'); return; }
-    body.key_b64 = key_b64;
-  } else {
-    const usbVol = selectedUsbVolume('unlock-usb-pick');
-    if (!usbVol) { alert('{{ t("usb.none") }}'); return; }
-    body.usb_volume = usbVol;
+  const body = {};
+  try {
+    const pw = unlockKeyPassphrase();
+    if (pw) body.key_passphrase_enc = await encryptSecret(pw);
+    if (upload) {
+      const keyEnc = await readUploadKeyEnc();
+      if (!keyEnc) { alert('no file'); return; }
+      body.key_b64_enc = keyEnc;
+    } else {
+      const usbVol = selectedUsbVolume('unlock-usb-pick');
+      if (!usbVol) { alert('{{ t("usb.none") }}'); return; }
+      body.usb_volume = usbVol;
+    }
+  } catch (e) {
+    alert('{{ t("job.error") }}');
+    return;
   }
   const data = await api(`/api/vaults/${vaultId}/unlock`, {method:'POST', body: JSON.stringify(body)});
-  if (!data.ok) { alert(data.error || 'error'); return; }
+  if (!data.ok) { alert(apiErrorText(data)); return; }
   await pollJob(data.job_id);
 }
 
 async function relockVault(upload) {
   const vaultId = document.getElementById('action-vault').value;
-  const body = { key_passphrase: unlockKeyPassphrase() };
-  if (upload) {
-    const key_b64 = await readUploadKeyB64();
-    if (!key_b64) { alert('no file'); return; }
-    body.key_b64 = key_b64;
-  } else {
-    const usbVol = selectedUsbVolume('unlock-usb-pick');
-    if (!usbVol) { alert('{{ t("usb.none") }}'); return; }
-    body.usb_volume = usbVol;
+  const body = {};
+  try {
+    const pw = unlockKeyPassphrase();
+    if (pw) body.key_passphrase_enc = await encryptSecret(pw);
+    if (upload) {
+      const keyEnc = await readUploadKeyEnc();
+      if (!keyEnc) { alert('no file'); return; }
+      body.key_b64_enc = keyEnc;
+    } else {
+      const usbVol = selectedUsbVolume('unlock-usb-pick');
+      if (!usbVol) { alert('{{ t("usb.none") }}'); return; }
+      body.usb_volume = usbVol;
+    }
+  } catch (e) {
+    alert('{{ t("job.error") }}');
+    return;
   }
   const data = await api(`/api/vaults/${vaultId}/relock`, {method:'POST', body: JSON.stringify(body)});
-  if (!data.ok) { alert(data.error || 'error'); return; }
+  if (!data.ok) { alert(apiErrorText(data)); return; }
   await pollJob(data.job_id);
 }
 

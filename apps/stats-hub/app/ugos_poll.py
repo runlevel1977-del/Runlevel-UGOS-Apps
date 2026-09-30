@@ -15,6 +15,7 @@ from ugos_api_client import UgosApiClient, UgosApiError
 from ugos_metrics import parse_dashboard_metrics
 
 _client_lock = threading.Lock()
+_fetch_lock = threading.Lock()
 _client: UgosApiClient | None = None
 _client_key: tuple[Any, ...] = ()
 _last_error = ""
@@ -23,6 +24,7 @@ _last_fail_at = 0.0
 _fail_backoff_sec = 5.0
 _last_error_logged = ""
 _ugos_ok_logged = False
+_last_metrics: dict[str, Any] | None = None
 _MIN_INTERVAL_SEC = 2.5
 _MAX_FAIL_BACKOFF_SEC = 60.0
 _last_ugos_volumes: list[dict[str, Any]] = []
@@ -341,13 +343,26 @@ def ugos_disks_to_temps(disks: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def fetch_ugos_metrics(*, force: bool = False) -> dict[str, Any] | None:
-    """Return parsed dashboard metrics or None if disabled/unconfigured."""
+    """Return parsed dashboard metrics or None if disabled/unconfigured.
+
+    Single-flight: concurrent callers (wake + main loop) never stack UGOS fetches
+    under load — that used to stall the monitor for minutes.
+    """
     global _last_error, _last_ok_at, _last_fail_at, _fail_backoff_sec, _last_error_logged, _ugos_ok_logged
+    global _last_metrics
     cfg = load_ugos_api_settings()
     if not cfg.get("enabled"):
+        if _last_error:
+            _last_error = ""
         return None
     if not (cfg.get("username") and cfg.get("password")):
         _last_error = "credentials_missing"
+        if _last_error_logged != _last_error:
+            append_log(
+                "UGOS API: credentials_missing "
+                "(username/password not stored — enter password and click Save)"
+            )
+            _last_error_logged = _last_error
         return None
     now = time.time()
     if not force and _last_ok_at and (now - _last_ok_at) < _MIN_INTERVAL_SEC:
@@ -355,46 +370,58 @@ def fetch_ugos_metrics(*, force: bool = False) -> dict[str, Any] | None:
     if not force and _last_fail_at and (now - _last_fail_at) < _fail_backoff_sec:
         return None
 
+    # Another fetch already running — keep UI alive with last good / cache.
+    if not _fetch_lock.acquire(blocking=False):
+        if _last_metrics and _last_metrics.get("ok"):
+            return {**_last_metrics, "cached": True}
+        if _last_ok_at:
+            return {"ok": True, "cached": True}
+        return None
+
     try:
-        client = _get_client(cfg)
-        raw = client.fetch_snapshot()
-        metrics = parse_dashboard_metrics(raw)
-    except UgosApiError as ex:
-        err = str(ex)[:200]
-        _last_error = err
-        _last_fail_at = now
-        _fail_backoff_sec = min(_MAX_FAIL_BACKOFF_SEC, max(5.0, _fail_backoff_sec * 1.5))
-        if err != _last_error_logged:
-            append_log(f"UGOS API: {ex}")
-            _last_error_logged = err
-        _ugos_ok_logged = False
-        with _client_lock:
-            global _client
-            _client = None
-        return None
-    except Exception as ex:
-        err = str(ex)[:200]
-        _last_error = err
-        _last_fail_at = now
-        _fail_backoff_sec = min(_MAX_FAIL_BACKOFF_SEC, max(5.0, _fail_backoff_sec * 1.5))
-        if err != _last_error_logged:
-            append_log(f"UGOS API error: {ex}")
-            _last_error_logged = err
-        _ugos_ok_logged = False
-        return None
+        try:
+            client = _get_client(cfg)
+            raw = client.fetch_snapshot()
+            metrics = parse_dashboard_metrics(raw)
+        except UgosApiError as ex:
+            err = str(ex)[:200]
+            _last_error = err
+            _last_fail_at = now
+            _fail_backoff_sec = min(_MAX_FAIL_BACKOFF_SEC, max(5.0, _fail_backoff_sec * 1.5))
+            if err != _last_error_logged:
+                append_log(f"UGOS API: {ex}")
+                _last_error_logged = err
+            _ugos_ok_logged = False
+            with _client_lock:
+                global _client
+                _client = None
+            return None
+        except Exception as ex:
+            err = str(ex)[:200]
+            _last_error = err
+            _last_fail_at = now
+            _fail_backoff_sec = min(_MAX_FAIL_BACKOFF_SEC, max(5.0, _fail_backoff_sec * 1.5))
+            if err != _last_error_logged:
+                append_log(f"UGOS API error: {ex}")
+                _last_error_logged = err
+            _ugos_ok_logged = False
+            return None
 
-    if not metrics.get("ok"):
-        _last_error = "no_metrics"
-        _last_fail_at = now
-        _ugos_ok_logged = False
-        return None
+        if not metrics.get("ok"):
+            _last_error = "no_metrics"
+            _last_fail_at = now
+            _ugos_ok_logged = False
+            return None
 
-    _last_error = ""
-    _last_fail_at = 0.0
-    _fail_backoff_sec = 5.0
-    _last_error_logged = ""
-    _last_ok_at = now
-    if not _ugos_ok_logged:
-        append_log("UGOS API snapshot OK")
-        _ugos_ok_logged = True
-    return metrics
+        _last_error = ""
+        _last_fail_at = 0.0
+        _fail_backoff_sec = 5.0
+        _last_error_logged = ""
+        _last_ok_at = now
+        _last_metrics = dict(metrics)
+        if not _ugos_ok_logged:
+            append_log("UGOS API snapshot OK")
+            _ugos_ok_logged = True
+        return metrics
+    finally:
+        _fetch_lock.release()

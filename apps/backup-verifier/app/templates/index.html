@@ -56,11 +56,12 @@
     pre { background: #0a0e12; padding: 0.75rem; overflow: auto; max-height: 200px; font-size: 0.78rem; border-radius: 6px; white-space: pre-wrap; }
     .header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 0.5rem; max-width: 1200px; }
     .header .title-block { flex: 1; min-width: 220px; }
-    .lang-switch { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
-    .lang-switch .lang-label { font-size: 0.8rem; color: var(--muted); margin-right: 0.25rem; }
-    .lang-switch button.lang-btn { min-width: 2.6rem; background: #2a3545; color: var(--muted); margin: 0; font-weight: 600; }
-    .lang-switch button.lang-btn.active { background: var(--accent); color: #fff; }
-    .lang-switch button.lang-btn:not(.active):hover { color: var(--text); }
+    .lang-switch { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+    .lang-switch .lang-label { font-size: 0.8rem; color: var(--muted); }
+    .lang-switch select {
+      background: #0a0e12; color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 0.35rem 0.55rem; font-size: 0.85rem; min-width: 7.5rem;
+    }
     .status-ok { color: var(--ok); }
     .status-fail { color: var(--bad); }
     .status-run { color: #e8a060; }
@@ -73,10 +74,13 @@
       <p class="hint">{{ t('app.intro') }}<br>{{ t('app.readonly') }}</p>
       <p class="hint">{{ t('companion') }} <a href="{{ nas_admin_url }}" style="color:var(--accent)" target="_blank" rel="noopener">Ugreen NAS Admin</a></p>
     </div>
-    <div class="lang-switch" role="group" aria-label="{{ t('ui.language') }}">
-      <span class="lang-label">{{ t('ui.language') }}</span>
-      <button type="button" class="lang-btn{% if lang == 'de' %} active{% endif %}" onclick="setLang('de')"{% if lang == 'de' %} aria-current="true"{% endif %}>DE</button>
-      <button type="button" class="lang-btn{% if lang == 'en' %} active{% endif %}" onclick="setLang('en')"{% if lang == 'en' %} aria-current="true"{% endif %}>EN</button>
+    <div class="lang-switch">
+      <label class="lang-label" for="lang-select">{{ t('ui.language') }}</label>
+      <select id="lang-select" onchange="setLang(this.value)" aria-label="{{ t('ui.language') }}">
+        {% for code, label in lang_labels.items() %}
+        <option value="{{ code }}" {% if lang == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
     </div>
   </div>
 
@@ -224,11 +228,60 @@
     </div>
   </div>
 
+  <script src="/static/rsa_http.js"></script>
   <script>
     const LANG = {{ lang|tojson }};
     const I18N = {{ i18n|tojson }};
     const LANG_COOKIE = 'bv_lang';
-    function T(k) { return I18N[k] || k; }
+    function T(k, params) {
+      let s = I18N[k] || k;
+      if (params && typeof params === 'object') {
+        for (const [key, val] of Object.entries(params)) {
+          s = s.split('{' + key + '}').join(String(val));
+        }
+      }
+      return s;
+    }
+
+    function jobLastMessage(j) {
+      if (j.last_message_key) {
+        return T(j.last_message_key, j.last_message_params || {});
+      }
+      if (j.last_status === 'ok') return T('job.ok');
+      if (j.last_status === 'fail' && j.last_details && typeof j.last_details === 'object') {
+        const d = j.last_details;
+        const missing = Number(d.missing_on_dst || 0);
+        const differ = Number(d.differ_count || 0);
+        if (missing || differ) return T('job.fail_diff_backup', { missing, differ });
+        const cnt = Number(d.change_count || 0);
+        if (cnt > 0) return T('job.fail_diff', { count: cnt });
+        if (d.code && typeof d.code === 'string') {
+          const key = 'job.fail_' + d.code;
+          if (I18N[key]) return T(key);
+        }
+      }
+      return j.last_message || '';
+    }
+
+    function progressMessage(j) {
+      const p = j.progress || {};
+      if (p.message_key) return T(p.message_key, p.message_params || {});
+      return p.message || jobLastMessage(j) || T('job.running');
+    }
+
+    async function encryptSecret(plain) {
+      if (!plain) return '';
+      if (typeof window.rlEncryptSecret !== 'function') {
+        throw new Error('encryption unavailable');
+      }
+      return window.rlEncryptSecret(plain);
+    }
+
+    async function encryptField(body, name, value) {
+      const v = String(value || '').trim();
+      if (!v) return;
+      body[name + '_enc'] = await encryptSecret(v);
+    }
 
     async function setLang(code) {
       if (code === LANG) return;
@@ -372,12 +425,17 @@
     }
 
     async function confirmSaveDevice() {
-      const body = {
-        host: pendingHost,
-        name: document.getElementById('save-name').value,
-        username: document.getElementById('save-user').value,
-        password: document.getElementById('save-pass').value,
-      };
+      const body = {};
+      try {
+        await encryptField(body, 'host', pendingHost);
+        await encryptField(body, 'name', document.getElementById('save-name').value);
+        await encryptField(body, 'username', document.getElementById('save-user').value);
+        const pw = document.getElementById('save-pass').value;
+        if (pw) body.password_enc = await encryptSecret(pw);
+      } catch (e) {
+        document.getElementById('save-err').textContent = T('err.generic');
+        return;
+      }
       const r = await apiFetch('/api/devices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -558,7 +616,7 @@
         const p = j.progress || {};
         const pct = typeof p.percent === 'number' ? p.percent : 0;
         const indet = !!p.indeterminate;
-        const msg = p.message || j.last_message || T('job.running');
+        const msg = progressMessage(j);
         const fillClass = indet ? 'indeterminate' : '';
         const div = document.createElement('div');
         div.className = 'job-item';
@@ -594,7 +652,8 @@
       tb.innerHTML = '';
       jobsCache.forEach(j => {
         const row = document.createElement('tr');
-        const msg = j.last_message ? '<br><small style="color:#8fa3b8">' + esc(j.last_message) + '</small>' : '';
+        const lastMsg = jobLastMessage(j);
+        const msg = lastMsg ? '<br><small style="color:#8fa3b8">' + esc(lastMsg) + '</small>' : '';
         const running = isJobRunning(j);
         row.innerHTML = `
           <td>${esc(j.name)}</td>
@@ -646,7 +705,7 @@
     function updateNotifySummary(s) {
       const parts = [];
       if (s.telegram_enabled && s.telegram_token_set) parts.push('Telegram');
-      if (s.email_enabled && s.smtp_host) parts.push('E-Mail');
+      if (s.email_enabled && (s.smtp_host || s.smtp_host_set || s.email_to_set)) parts.push('E-Mail');
       const el = document.getElementById('notify-summary');
       if (!parts.length) {
         el.textContent = '— ' + T('notify.summary_none');
@@ -666,7 +725,9 @@
       const s = data.settings || {};
       document.getElementById('notifyOnFail').checked = s.notify_on_fail !== false;
       document.getElementById('tgEnabled').checked = !!s.telegram_enabled;
-      document.getElementById('tgChat').value = s.telegram_chat_id || '';
+      const tgChat = document.getElementById('tgChat');
+      tgChat.value = '';
+      tgChat.placeholder = s.telegram_chat_id_set ? T('notify.token_saved') : '';
       const tgTok = document.getElementById('tgToken');
       tgTok.value = '';
       if (s.telegram_token_set) {
@@ -675,10 +736,14 @@
         tgTok.placeholder = '';
       }
       document.getElementById('mailEnabled').checked = !!s.email_enabled;
-      document.getElementById('smtpHost').value = s.smtp_host || '';
+      const smtpHost = document.getElementById('smtpHost');
+      smtpHost.value = '';
+      smtpHost.placeholder = s.smtp_host_set ? T('notify.token_saved') : '';
       document.getElementById('smtpPort').value = s.smtp_port || 587;
       document.getElementById('smtpTls').checked = s.smtp_tls !== false;
-      document.getElementById('smtpUser').value = s.smtp_user || '';
+      const smtpUser = document.getElementById('smtpUser');
+      smtpUser.value = '';
+      smtpUser.placeholder = s.smtp_user_set ? T('notify.token_saved') : '';
       const smtpPass = document.getElementById('smtpPass');
       smtpPass.value = '';
       if (s.smtp_password_set) {
@@ -686,8 +751,12 @@
       } else {
         smtpPass.placeholder = '';
       }
-      document.getElementById('emailFrom').value = s.email_from || '';
-      document.getElementById('emailTo').value = s.email_to || '';
+      const emailFrom = document.getElementById('emailFrom');
+      emailFrom.value = '';
+      emailFrom.placeholder = s.email_from_set ? T('notify.token_saved') : '';
+      const emailTo = document.getElementById('emailTo');
+      emailTo.value = '';
+      emailTo.placeholder = s.email_to_set ? T('notify.token_saved') : '';
       updateNotifySummary(s);
     }
 
@@ -695,17 +764,24 @@
       const body = {
         notify_on_fail: document.getElementById('notifyOnFail').checked,
         telegram_enabled: document.getElementById('tgEnabled').checked,
-        telegram_bot_token: document.getElementById('tgToken').value,
-        telegram_chat_id: document.getElementById('tgChat').value,
         email_enabled: document.getElementById('mailEnabled').checked,
-        smtp_host: document.getElementById('smtpHost').value,
         smtp_port: parseInt(document.getElementById('smtpPort').value, 10) || 587,
         smtp_tls: document.getElementById('smtpTls').checked,
-        smtp_user: document.getElementById('smtpUser').value,
-        smtp_password: document.getElementById('smtpPass').value,
-        email_from: document.getElementById('emailFrom').value,
-        email_to: document.getElementById('emailTo').value,
       };
+      try {
+        await encryptField(body, 'telegram_chat_id', document.getElementById('tgChat').value);
+        await encryptField(body, 'smtp_host', document.getElementById('smtpHost').value);
+        await encryptField(body, 'smtp_user', document.getElementById('smtpUser').value);
+        await encryptField(body, 'email_from', document.getElementById('emailFrom').value);
+        await encryptField(body, 'email_to', document.getElementById('emailTo').value);
+        const tok = document.getElementById('tgToken').value;
+        const smtpPw = document.getElementById('smtpPass').value;
+        if (tok) body.telegram_bot_token_enc = await encryptSecret(tok);
+        if (smtpPw) body.smtp_password_enc = await encryptSecret(smtpPw);
+      } catch (e) {
+        document.getElementById('notify-msg').textContent = T('err.generic');
+        return;
+      }
       const res = await apiFetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

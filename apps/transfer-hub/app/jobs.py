@@ -14,6 +14,7 @@ from typing import Any, Callable
 from devices import (
     LOCAL_ID,
     endpoint_label,
+    endpoint_path_list,
     endpoint_uses_smb,
     get_device,
     rclone_remote_url,
@@ -353,19 +354,57 @@ def _evaluate_rclone_result(
 
 def _normalize_endpoint(raw: Any) -> dict[str, Any]:
     if isinstance(raw, dict) and raw.get("device_id"):
+        paths = endpoint_path_list(raw)
         return {
             "device_id": raw.get("device_id"),
             "volume": raw.get("volume") or "",
             "share": raw.get("share") or "",
-            "path": raw.get("path") or "",
+            "path": paths[0] if len(paths) == 1 else "",
+            "paths": paths,
         }
     if isinstance(raw, str) and raw.strip():
+        p = raw.strip().removeprefix("/mnt/nas/").lstrip("/")
         return {
             "device_id": "local",
             "share": "",
-            "path": raw.strip().removeprefix("/mnt/nas/").lstrip("/"),
+            "path": p,
+            "paths": [p] if p else [""],
+            "volume": "",
         }
-    return {"device_id": "local", "volume": "", "share": "", "path": ""}
+    return {"device_id": "local", "volume": "", "share": "", "path": "", "paths": [""]}
+
+
+def _dest_path_for_source(dest_ep: dict[str, Any], source_path: str) -> str:
+    base = (dest_ep.get("path") or "").strip().strip("/")
+    src = (source_path or "").strip().strip("/")
+    if not src:
+        return base
+    leaf = src.split("/")[-1]
+    return f"{base}/{leaf}".strip("/") if base else leaf
+
+
+def _endpoint_with_path(ep: dict[str, Any], path: str) -> dict[str, Any]:
+    out = {k: v for k, v in ep.items() if k != "paths"}
+    out["path"] = (path or "").strip().strip("/")
+    out["paths"] = [out["path"]] if out["path"] else [""]
+    return out
+
+
+def expand_transfer_routes(
+    source_ep: dict[str, Any],
+    dest_ep: dict[str, Any],
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """Expand multi-folder source into one (src, dst) pair per folder."""
+    paths = endpoint_path_list(source_ep)
+    if not paths:
+        paths = [""]
+    routes: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for src_path in paths:
+        src = _endpoint_with_path(source_ep, src_path)
+        dst_path = _dest_path_for_source(dest_ep, src_path)
+        dst = _endpoint_with_path(dest_ep, dst_path)
+        routes.append((src, dst))
+    return routes
 
 
 def _parse_progress_line(line: str) -> dict[str, Any] | None:
@@ -694,30 +733,44 @@ def run_rsync_profile(profile: dict[str, Any]) -> tuple[bool, str]:
     move = bool(profile.get("delete_source_after"))
     smb_performance = bool(profile.get("smb_performance"))
     mode = "MOVE" if move else "COPY"
+    routes = expand_transfer_routes(src_ep, dst_ep)
+    total = len(routes)
+    lng = get_lang()
 
     try:
-        if use_rclone:
-            perf_note = " | SMB Performance" if smb_performance else ""
-            append_log(
-                f"START {profile.get('name')} | rclone {mode}{perf_note} "
-                f"{endpoint_label(src_ep)} -> {endpoint_label(dst_ep)}"
-            )
-            ok, msg = _run_rclone_transfer(
-                pid, src_ep, dst_ep, move=move, smb_performance=smb_performance
-            )
-        else:
-            append_log(
-                f"START {profile.get('name')} | rsync {mode} "
-                f"{endpoint_label(src_ep)} -> {endpoint_label(dst_ep)}"
-            )
-            ok, msg = _run_local_rsync(pid, src_ep, dst_ep, move=move)
-        if ok:
-            _set_job(pid, status="ok", percent=100, message=msg)
-            append_log(f"OK {profile.get('name')}\n{msg}")
-        else:
-            _set_job(pid, status="error", message=msg[:500])
-            append_log(f"FAIL {profile.get('name')}\n{msg}")
-        return ok, msg
+        last_msg = ""
+        for idx, (src, dst) in enumerate(routes, start=1):
+            route_note = f"{idx}/{total}"
+            _set_job(pid, detail=route_note, percent=int(((idx - 1) / max(total, 1)) * 100))
+            if use_rclone:
+                perf_note = " | SMB Performance" if smb_performance else ""
+                append_log(
+                    f"START {profile.get('name')} | rclone {mode}{perf_note} "
+                    f"route {route_note}: {endpoint_label(src)} -> {endpoint_label(dst)}"
+                )
+                ok, msg = _run_rclone_transfer(
+                    pid, src, dst, move=move, smb_performance=smb_performance
+                )
+            else:
+                append_log(
+                    f"START {profile.get('name')} | rsync {mode} "
+                    f"route {route_note}: {endpoint_label(src)} -> {endpoint_label(dst)}"
+                )
+                ok, msg = _run_local_rsync(pid, src, dst, move=move)
+            last_msg = msg
+            if not ok:
+                _set_job(pid, status="error", message=msg[:500])
+                append_log(f"FAIL {profile.get('name')} route {route_note}\n{msg}")
+                return False, msg
+            append_log(f"OK {profile.get('name')} route {route_note}")
+        done_msg = (
+            t("transfer.multi_done", lng, count=total, detail=last_msg)
+            if total > 1
+            else last_msg
+        )
+        _set_job(pid, status="ok", percent=100, message=done_msg)
+        append_log(f"OK {profile.get('name')}\n{done_msg}")
+        return True, done_msg
     except Exception as e:
         _set_job(pid, status="error", message=str(e)[:500])
         append_log(f"FAIL {profile.get('name')} {e}")

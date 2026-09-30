@@ -1,0 +1,181 @@
+spec_version: "2.1"
+app_id: com.runlevel.lockandkey
+version: 0.1.32
+support_arch:
+  - amd64
+  - arm64
+is_docker_app: true
+only_admin: true
+port: 29135
+open_type: tab
+supports:
+  - app
+  - pc
+tag_types:
+  - security
+depend_fw_version: 1.13.0.0000
+depend_docker_version: 1.7.0.0000
+license_agreement_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/EULA.md"
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/LICENSE"
+source_code_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/THIRD_PARTY_LICENSES.md"
+technical_support_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues"
+privacy_policy_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/privacy/lockandkey.md"
+
+
+parameters:
+  - key: DATA_PATH
+    type: path
+    required: true
+    changeable: true
+    i18n:
+      en-US:
+        name: Data directory
+        description: "Vault registry and logs (e.g. /volume1/docker/lock-and-key/data)"
+      de-DE:
+        name: Datenverzeichnis
+        description: "Tresor-Metadaten und Logs (z. B. /volume1/docker/lock-and-key/data)"
+      zh-CN:
+        name: 数据目录
+        description: "应用数据目录，例如 /volume1/docker/<app>/data"
+      fr-FR:
+        name: Répertoire de données
+        description: "Registre des coffres et journaux (ex. /volume1/docker/lock-and-key/data)"
+      es-ES:
+        name: Directorio de datos
+        description: "Registro de cajas fuertes y registros (p. ej. /volume1/docker/lock-and-key/data)"
+      it-IT:
+        name: Directory dati
+        description: "Registro caveau e log (es. /volume1/docker/lock-and-key/data)"
+      pl-PL:
+        name: Katalog danych
+        description: "Rejestr sejfów i logi (np. /volume1/docker/lock-and-key/data)"
+      ru-RU:
+        name: Каталог данных
+        description: "Реестр хранилищ и журналы (напр. /volume1/docker/lock-and-key/data)"
+      tr-TR:
+        name: Veri dizini
+        description: "Kasa kaydı ve günlükler (örn. /volume1/docker/lock-and-key/data)"
+      hr-HR:
+        name: Direktorij podataka
+        description: "Registar sefova i zapisnici (npr. /volume1/docker/lock-and-key/data)"
+  - key: NAS_DATA_ROOT
+    type: path
+    required: true
+    changeable: true
+    i18n:
+      en-US:
+        name: UGOS folder shortcut
+        description: "Subfolder for folder picker (Volume 1/2 separate in app)"
+      de-DE:
+        name: UGOS-Ordner
+        description: "Kurzweg für Ordnerauswahl (Volume 1/2 in der App)"
+      zh-CN:
+        name: UGOS 文件夹
+        description: "供应用访问的用户指定文件夹快捷方式"
+      fr-FR:
+        name: Raccourci dossier UGOS
+        description: "Sous-dossier pour le sélecteur (Volume 1/2 séparés dans l’app)"
+      es-ES:
+        name: Acceso carpeta UGOS
+        description: "Subcarpeta para el selector (Volumen 1/2 aparte en la app)"
+      it-IT:
+        name: Collegamento cartella UGOS
+        description: "Sottocartella per il selettore (Volume 1/2 separati nell’app)"
+      pl-PL:
+        name: Skrót folderu UGOS
+        description: "Podfolder do wyboru (Wolumen 1/2 osobno w aplikacji)"
+      ru-RU:
+        name: Ярлык папки UGOS
+        description: "Подпапка для выбора (Том 1/2 отдельно в приложении)"
+      tr-TR:
+        name: UGOS klasör kısayolu
+        description: "Seçici için alt klasör (Birim 1/2 uygulamada ayrı)"
+      hr-HR:
+        name: UGOS prečac mape
+        description: "Podmapa za odabir (Volumen 1/2 odvojeno u aplikaciji)"
+i18n:
+  en-US:
+    name: Lock & Key
+    description: "Manage encrypted vaults and access keys on your UGREEN NAS through a simple web UI. Vault registry and logs stay under your local control. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/lockandkey.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  de-DE:
+    name: Lock & Key
+    description: "Verschlüsselte Tresore und Zugriffsschlüssel auf dem UGREEN NAS in einer einfachen Web-Oberfläche verwalten. Register und Logs bleiben lokal. Windows-Begleiter: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/lockandkey.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  zh-CN:
+    name: Lock & Key
+    description: "在绿联 NAS 上通过简洁的 Web 界面管理加密保险库与访问密钥，保险库登记信息与日志由您本地掌控，便于集中安全管理与日常维护工作。配套 Windows 应用：Ugreen NAS Admin。"
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/lockandkey.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  fr-FR:
+    name: Lock & Key
+    description: "Gérez des coffres chiffrés et des clés d’accès sur votre NAS UGREEN via une interface web simple. Registre et journaux restent locaux. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/lockandkey.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  es-ES:
+    name: Lock & Key
+    description: "Gestione cajas fuertes cifradas y claves de acceso en su NAS UGREEN con una interfaz web sencilla. El registro y los logs quedan bajo su control local. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/lockandkey.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  it-IT:
+    name: Lock & Key
+    description: "Gestisci caveau cifrati e chiavi di accesso sul NAS UGREEN con una semplice interfaccia web. Registro e log restano sotto il tuo controllo locale. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/lockandkey.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  pl-PL:
+    name: Lock & Key
+    description: "Zarządzaj zaszyfrowanymi sejfami i kluczami dostępu na NAS UGREEN przez prosty interfejs WWW. Rejestr i logi pozostają lokalnie. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/lockandkey.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  ru-RU:
+    name: Lock & Key
+    description: "Управляйте зашифрованными хранилищами и ключами доступа на UGREEN NAS через простой веб-интерфейс. Реестр и журналы остаются локальными. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/lockandkey.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  tr-TR:
+    name: Lock & Key
+    description: "UGREEN NAS üzerinde şifreli kasaları ve erişim anahtarlarını basit bir web arayüzüyle yönetin. Kayıt ve günlükler yerelde kalır. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/lockandkey.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  hr-HR:
+    name: Lock & Key
+    description: "Upravljajte šifriranim sefovima i ključevima pristupa na UGREEN NAS-u putem jednostavnog web sučelja. Registar i zapisnici ostaju lokalni. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/lockandkey.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"

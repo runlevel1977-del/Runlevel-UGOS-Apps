@@ -64,10 +64,10 @@ def _is_browsable_dir_name(name: str) -> bool:
 
 
 def _assert_user_folder_path(subpath: str) -> None:
-    from i18n import get_lang, t
+    from i18n import I18nError
 
     if _path_has_system_segment(subpath):
-        raise ValueError(t("err.system_folder", get_lang()))
+        raise I18nError("err.system_folder")
 
 
 def public_vault_row(v: dict[str, Any]) -> dict[str, Any]:
@@ -506,11 +506,13 @@ def get_vault_or_recover(vault_id: str) -> dict[str, Any] | None:
 
 
 def browse_dirs(volume_id: str, subpath: str) -> dict[str, Any]:
+    from i18n import I18nError
+
     rel = (subpath or "").strip().strip("/")
     _assert_user_folder_path(rel)
     base = resolve_local_path(volume_id, subpath)
     if not base.is_dir():
-        raise ValueError("not a directory")
+        raise I18nError("err.not_directory")
     dirs: list[dict[str, str]] = []
     try:
         for entry in sorted(base.iterdir(), key=lambda p: p.name.casefold()):
@@ -539,36 +541,60 @@ def _now() -> str:
 
 
 def _resolve_usb_row(usb_volume_id: str = "", *, required: bool = True) -> dict[str, Any]:
+    from i18n import I18nError
     from volumes import usb_volume_id as vol_usb_id
 
     rows = usb_rows_enriched()
     if not rows:
         if required:
-            raise ValueError("no USB stick mounted")
+            raise I18nError("err.no_usb")
         return {}
     if usb_volume_id:
         for row in rows:
             if vol_usb_id(Path(row["mount"])) == usb_volume_id:
                 return row
         if required:
-            raise ValueError("selected USB stick not mounted")
+            raise I18nError("err.usb_selected_missing")
         return {}
     if len(rows) == 1:
         return rows[0]
     if required:
-        raise ValueError("select a USB stick")
+        raise I18nError("err.select_usb")
     return {}
 
 
 def _run_job(job_id: str, fn: Callable[[], None]) -> None:
+    from i18n import I18nError
+
     def worker():
         try:
             set_job(job_id, status="running")
             fn()
             set_job(job_id, status="done")
+        except I18nError as exc:
+            append_log(f"job {job_id} failed: {exc}")
+            set_job(
+                job_id,
+                status="error",
+                error=str(exc),
+                error_key=exc.key,
+                error_params=exc.params,
+            )
         except Exception as exc:
             append_log(f"job {job_id} failed: {exc}")
-            set_job(job_id, status="error", error=str(exc))
+            msg = str(exc)
+            low = msg.lower()
+            if "integrity check failed" in low:
+                detail = msg.split(":", 1)[-1].strip() if ":" in msg else msg
+                set_job(
+                    job_id,
+                    status="error",
+                    error=msg,
+                    error_key="err.verify_fail_detail",
+                    error_params={"detail": detail},
+                )
+            else:
+                set_job(job_id, status="error", error=msg)
 
     threading.Thread(target=worker, daemon=True).start()
 
@@ -581,29 +607,25 @@ def create_seal_job(
     usb_volume_id: str = "",
     key_passphrase: str = "",
 ) -> tuple[str, dict[str, Any], bytes]:
+    from i18n import I18nError
+
     _assert_user_folder_path(subpath)
     folder = resolve_local_path(volume_id, subpath)
     if not folder.is_dir():
-        raise ValueError("folder not found")
+        raise I18nError("err.folder_not_found")
     state = _resolve_folder_seal_state(folder)
     if state["sealed"]:
         sealed_name = (state["sealed_name"] or state["sealed_vault_id"] or "").strip() or "?"
-        raise ValueError(f"folder already sealed ({sealed_name}) — unlock first or pick another folder")
+        raise I18nError("err.folder_already_sealed", name=sealed_name)
     repair_folder_before_seal(folder)
     enc_left = count_encrypted_files(folder)
     open_left = count_sealable_files(folder)
     if enc_left > 0 and open_left > 0:
-        raise ValueError(
-            "folder is partially sealed (mix of open files and .lkenc) — "
-            "unlock with key first or remove orphaned encrypted files manually"
-        )
+        raise I18nError("err.folder_partial")
     sealable = int(state["sealable_count"] or 0)
     host = host_path_for(volume_id, subpath)
     if sealable <= 0:
-        raise ValueError(
-            f"no encryptable files in {host} "
-            f"(container: {folder}) — use Volume 1/2 for shared folders, not UGOS shortcut"
-        )
+        raise I18nError("err.no_encryptable", host=host)
     vault_id = new_vault_id()
     key = new_master_key()
     usb_label = default_usb_label(vault_id)
@@ -617,15 +639,16 @@ def create_seal_job(
         usb_serial = (picked.get("usb_serial") or "").strip()
         other = vault_bound_to_usb_serial(usb_serial)
         if other:
-            raise ValueError(
-                f"USB-Stick ist bereits Tresor „{other.get('name') or other.get('id')}“ zugeordnet"
+            raise I18nError(
+                "err.usb_bound_other",
+                name=str(other.get("name") or other.get("id") or "?"),
             )
         mount = Path(picked["mount"])
         owner = owning_vault_for_stick(mount)
         if owner:
-            raise ValueError(
-                f"USB-Stick gehört noch zu Tresor „{owner.get('name') or owner.get('id')}“ — "
-                f"anderen Stick wählen oder diesen Tresor zuerst löschen"
+            raise I18nError(
+                "err.usb_owned_other",
+                name=str(owner.get("name") or owner.get("id") or "?"),
             )
         usb_label = (picked.get("stick_name") or picked.get("model") or picked.get("volume_label") or usb_label).strip() or usb_label
         usb_model = (picked.get("model") or "").strip()
@@ -685,7 +708,7 @@ def create_seal_job(
             count = int(result.get("files") or 0)
             verify = result.get("verify") or {}
             if count <= 0:
-                raise ValueError(f"encrypted 0 files in {folder}")
+                raise I18nError("err.encrypted_zero", folder=str(folder))
             vault["status"] = "locked"
             vault["updated"] = _now()
             vault["file_count"] = count
@@ -724,11 +747,13 @@ def create_unlock_job(
     usb_volume_id: str = "",
     key_passphrase: str = "",
 ) -> str:
+    from i18n import I18nError
+
     vault = get_vault_or_recover(vault_id)
     if not vault:
-        raise ValueError("vault not found")
+        raise I18nError("err.vault_not_found")
     if vault.get("status") != "locked":
-        raise ValueError("vault not locked")
+        raise I18nError("err.vault_not_locked")
     folder = resolve_local_path(vault.get("volume", "1"), vault.get("path") or "")
     key: bytes | None = None
     key_data: dict[str, Any] | None = None
@@ -738,13 +763,13 @@ def create_unlock_job(
         row = _resolve_usb_row(usb_volume_id, required=True)
         ok, reason, _ = match_usb_binding(vault, usb_rows=[row])
         if not ok:
-            raise ValueError(reason)
+            raise I18nError("err.usb_binding_mismatch")
         key_path = find_key_on_usb(vault_id, Path(row["mount"]))
         if not key_path:
-            raise ValueError("key file not found on USB")
+            raise I18nError("err.key_not_on_usb")
         key, key_data = parse_key_payload(key_path.read_bytes(), key_passphrase)
     if key_data and (key_data.get("vault_id") or "") != vault_id:
-        raise ValueError("key file vault mismatch")
+        raise I18nError("err.key_vault_mismatch")
     job_id = uuid.uuid4().hex[:12]
 
     def work():
@@ -786,27 +811,29 @@ def create_relock_job(
     usb_volume_id: str = "",
     key_passphrase: str = "",
 ) -> str:
+    from i18n import I18nError
+
     vault = get_vault_or_recover(vault_id)
     if not vault:
-        raise ValueError("vault not found")
+        raise I18nError("err.vault_not_found")
     if vault.get("status") != "unlocked":
-        raise ValueError("vault not unlocked")
+        raise I18nError("err.vault_not_unlocked")
     folder = resolve_local_path(vault.get("volume", "1"), vault.get("path") or "")
     if _resolve_folder_seal_state(folder)["sealed"]:
-        raise ValueError("folder already sealed")
+        raise I18nError("err.folder_already_sealed_simple")
     if key_bytes:
         key, key_data = parse_key_payload(key_bytes, key_passphrase)
     else:
         row = _resolve_usb_row(usb_volume_id, required=True)
         ok, reason, _ = match_usb_binding(vault, usb_rows=[row])
         if not ok:
-            raise ValueError(reason)
+            raise I18nError("err.usb_binding_mismatch")
         key_path = find_key_on_usb(vault_id, Path(row["mount"]))
         if not key_path:
-            raise ValueError("key file not found on USB")
+            raise I18nError("err.key_not_on_usb")
         key, key_data = parse_key_payload(key_path.read_bytes(), key_passphrase)
     if key_data and (key_data.get("vault_id") or "") != vault_id:
-        raise ValueError("key file vault mismatch")
+        raise I18nError("err.key_vault_mismatch")
     job_id = uuid.uuid4().hex[:12]
 
     def work():
@@ -870,11 +897,13 @@ def remove_vault_record(vault_id: str, force: bool = False) -> bool:
     vault = get_vault(vault_id)
     if not vault:
         return False
+    from i18n import I18nError
+
     status = (vault.get("status") or "").strip()
     if status == "locking":
-        raise ValueError("vault is busy")
+        raise I18nError("err.vault_busy")
     if status == "locked" and not force:
-        raise ValueError("vault is locked — confirm delete to remove from list only")
+        raise I18nError("err.vault_locked_delete")
     append_log(f"vault record removed {vault_id} ({vault.get('name')}) force={force}")
     try:
         folder = resolve_local_path(vault.get("volume", "1"), vault.get("path") or "")

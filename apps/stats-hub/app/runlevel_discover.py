@@ -212,6 +212,25 @@ def _container_for(app_id: str, pkg: str) -> tuple[str, bool, str]:
     return cid, running, state
 
 
+def probe_host() -> str:
+    """Host to reach published app ports from inside a bridge-network container."""
+    explicit = (
+        os.environ.get("RUNLEVEL_PROBE_HOST")
+        or os.environ.get("UGOS_API_HOST")
+        or ""
+    ).strip()
+    if explicit:
+        return explicit
+    if os.environ.get("UGOS_API_USE_LOCALHOST", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    ):
+        return "127.0.0.1"
+    return "host.docker.internal"
+
+
 def probe_for(app_id: str) -> dict[str, Any]:
     row = dict(APP_PROBES.get(app_id) or _DEFAULT_PROBE)
     if app_id == os.environ.get("UGOS_APP_ID", "com.runlevel.statshub"):
@@ -236,6 +255,7 @@ def discover_installed_runlevel_apps() -> list[dict[str, Any]]:
                 "name": _display_name(cfg, app_id=app_id),
                 "port": port,
                 "version": _version_label(cfg),
+                "icon_url": "",
                 "summary_path": str(probe.get("summary_path") or "/api/status"),
                 "kind": str(probe.get("kind") or "profiles"),
                 "self": bool(probe.get("self")),

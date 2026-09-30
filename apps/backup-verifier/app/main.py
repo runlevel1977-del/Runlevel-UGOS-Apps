@@ -10,18 +10,22 @@ from compliance import (
     save_privacy_consent,
 )
 from flask import Flask, g, jsonify, make_response, render_template, request
+from ugos_auth import init_ugos_auth
+from transport_rsa import decrypt_wire_fields
+from rate_limit import allow as rate_allow
 
 from devices import (
     LOCAL_ID,
     add_smb_device,
     browse,
     delete_device,
+    device_public_row,
     endpoint_label,
     get_device,
     load_devices,
     test_smb,
 )
-from i18n import LANG_COOKIE, bundle, get_lang, lang_from_request, normalize_lang, t
+from i18n import LANG_COOKIE, LANG_LABELS, bundle, get_lang, lang_from_request, normalize_lang, t
 from icon_sync import sync_appcenter_icon
 from jobs import delete_job, list_active_jobs, start_job, update_job_fields
 from notify import public_settings, save_notify_settings, send_test_notifications
@@ -33,7 +37,8 @@ from store import DATA_DIR, append_log, load_jobs, new_job_id, read_log_tail, sa
 from volumes import list_volumes, normalize_volume_id
 
 app = Flask(__name__)
-APP_VERSION = os.environ.get("BACKUP_VERIFIER_VERSION", "0.3.14")
+init_ugos_auth(app)
+APP_VERSION = os.environ.get("BACKUP_VERIFIER_VERSION", "0.3.24")
 NAS_ADMIN_URL = os.environ.get(
     "NAS_ADMIN_URL",
     "https://github.com/runlevel1977-del/UgreenNASAdmin/releases/latest",
@@ -50,6 +55,11 @@ def _lang_cookie_response(resp, lang: str):
     return resp
 
 
+def _decrypt_password_fields(obj: dict, *keys: str) -> None:
+    """Reject plaintext secrets/PII; accept RSA cipher fields (*_enc)."""
+    decrypt_wire_fields(DATA_DIR, obj, *(keys or ("password",)))
+
+
 @app.context_processor
 def _inject_i18n():
     lng = getattr(g, "lang", "en")
@@ -61,6 +71,7 @@ def _inject_i18n():
         "lang": lng,
         "t": _t,
         "i18n": bundle(lng),
+        "lang_labels": LANG_LABELS,
         "nas_admin_url": NAS_ADMIN_URL,
         **compliance_context(DATA_DIR),
     }
@@ -103,7 +114,7 @@ def _validate_endpoint(ep: dict, lng: str) -> str | None:
 
 @app.route("/health")
 def health():
-    return jsonify({"ok": True, "version": APP_VERSION, "lang": get_lang()})
+    return jsonify({"ok": True})
 
 
 @app.route("/")
@@ -120,7 +131,7 @@ def api_set_lang():
     body = request.get_json(force=True, silent=True) or {}
     picked = normalize_lang(body.get("lang"))
     if not picked:
-        return jsonify({"ok": False, "error": "lang must be de or en"}), 400
+        return jsonify({"ok": False, "error": "unsupported lang"}), 400
     resp = jsonify({"ok": True, "lang": picked, "i18n": bundle(picked)})
     return _lang_cookie_response(resp, picked)
 
@@ -138,10 +149,13 @@ def api_config():
 @app.route("/api/devices", methods=["GET"])
 def api_devices():
     devices = load_devices()
+    out = []
     for d in devices:
+        row = device_public_row(d.copy())
         if d.get("id") == LOCAL_ID:
-            d["name"] = t("device.this_nas", get_lang())
-    return jsonify(devices)
+            row["name"] = t("device.this_nas", get_lang())
+        out.append(row)
+    return jsonify(out)
 
 
 @app.route("/api/devices/scan", methods=["GET"])
@@ -168,11 +182,17 @@ def api_probe_host():
 
 @app.route("/api/devices", methods=["POST"])
 def api_add_device():
-
     if not has_privacy_consent(DATA_DIR):
         body, code = consent_required_response()
         return jsonify(body), code
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    if not rate_allow("devices", ip, max_n=10, window_sec=300):
+        return jsonify({"ok": False, "error": "Too many attempts, try later"}), 429
     body = request.get_json(force=True, silent=True) or {}
+    try:
+        _decrypt_password_fields(body, "password", "host", "name", "username")
+    except ValueError:
+        return jsonify({"ok": False, "error": "Encrypted fields required"}), 400
     host = (body.get("host") or "").strip()
     name = (body.get("name") or host).strip()
     user = (body.get("username") or "").strip()
@@ -184,7 +204,7 @@ def api_add_device():
         return jsonify({"ok": False, "error": msg}), 400
     dev = add_smb_device(name, host, user, password)
     append_log(f"Device saved: {name} ({host})")
-    return jsonify({"ok": True, "device": {**dev, "password": "***"}})
+    return jsonify({"ok": True, "device": device_public_row(dev)})
 
 
 @app.route("/api/devices/<device_id>", methods=["DELETE"])
@@ -306,6 +326,19 @@ def api_save_notifications():
         body, code = consent_required_response()
         return jsonify(body), code
     body = request.get_json(force=True, silent=True) or {}
+    try:
+        _decrypt_password_fields(
+            body,
+            "telegram_bot_token",
+            "smtp_password",
+            "telegram_chat_id",
+            "smtp_user",
+            "smtp_host",
+            "email_from",
+            "email_to",
+        )
+    except ValueError:
+        return jsonify({"ok": False, "error": "Encrypted fields required"}), 400
     settings = save_notify_settings(body)
     append_log("Notification settings saved")
     return jsonify({"ok": True, "settings": settings})
@@ -346,7 +379,9 @@ def api_privacy_status():
 
 @app.route("/api/privacy/consent", methods=["POST"])
 def api_privacy_consent():
-    row = save_privacy_consent(DATA_DIR)
+    body = request.get_json(force=True, silent=True) or {}
+    accepted = bool(body.get("accepted", True)) and not bool(body.get("declined"))
+    row = save_privacy_consent(DATA_DIR, accepted=accepted)
     return jsonify({"ok": True, "consent": row})
 
 if __name__ == "__main__":

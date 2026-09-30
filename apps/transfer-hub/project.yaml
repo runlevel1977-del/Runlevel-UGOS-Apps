@@ -1,0 +1,217 @@
+spec_version: "2.1"
+app_id: com.runlevel.transferhub
+version: 0.6.35
+support_arch:
+  - amd64
+  - arm64
+is_docker_app: true
+only_admin: true
+port: 29100
+open_type: tab
+supports:
+  - app
+  - pc
+tag_types:
+  - utility
+  - devtool
+depend_fw_version: 1.13.0.0000
+depend_docker_version: 1.7.0.0000
+license_agreement_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/EULA.md"
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/LICENSE"
+source_code_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/THIRD_PARTY_LICENSES.md"
+technical_support_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/issues"
+privacy_policy_link:
+  - "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/privacy/transferhub.md"
+
+
+parameters:
+  - key: NAS_DATA_ROOT
+    type: path
+    required: true
+    changeable: true
+    i18n:
+      en-US:
+        name: UGOS folder
+        description: "Only this folder is mounted for copy/sync (not the whole NAS). Pick the target folder, e.g. a backup share. Restart after change."
+      de-DE:
+        name: UGOS-Ordner
+        description: "Nur dieser Ordner wird für Kopieren/Sync gemountet (nicht das ganze NAS). Zielordner wählen, z. B. SICHERN. Danach App neu starten."
+      zh-CN:
+        name: UGOS 文件夹
+        description: "仅挂载您选择的文件夹用于复制/同步（不会挂载整个 NAS）。请选择目标文件夹，例如备份共享。更改后请重启应用。"
+      fr-FR:
+        name: Dossier UGOS
+        description: "Seul ce dossier est monté pour la copie/sync (pas tout le NAS). Choisissez le dossier cible, p. ex. une sauvegarde. Redémarrez après modification."
+      es-ES:
+        name: Carpeta UGOS
+        description: "Solo se monta esta carpeta para copiar/sincronizar (no todo el NAS). Elija la carpeta de destino, p. ej. una copia de seguridad. Reinicie tras el cambio."
+      it-IT:
+        name: Cartella UGOS
+        description: "Solo questa cartella viene montata per copia/sync (non tutto il NAS). Scegliere la cartella di destinazione, es. un backup. Riavviare dopo la modifica."
+      pl-PL:
+        name: Folder UGOS
+        description: "Tylko ten folder jest montowany do kopiowania/synchronizacji (nie cały NAS). Wybierz folder docelowy, np. udział kopii. Po zmianie zrestartuj aplikację."
+      ru-RU:
+        name: Папка UGOS
+        description: "Для копирования/синхронизации монтируется только эта папка (не весь NAS). Выберите целевую папку, например резервную. После изменения перезапустите приложение."
+      tr-TR:
+        name: UGOS klasörü
+        description: "Kopyalama/senkron için yalnızca bu klasör bağlanır (tüm NAS değil). Hedef klasörü seçin, örn. yedek paylaşımı. Değişiklikten sonra uygulamayı yeniden başlatın."
+      hr-HR:
+        name: UGOS mapa
+        description: "Za kopiranje/sinkronizaciju montira se samo ova mapa (ne cijeli NAS). Odaberite odredišnu mapu, npr. sigurnosnu dijeljenje. Nakon promjene ponovno pokrenite aplikaciju."
+  - key: LAN_SUBNET
+    type: string
+    required: false
+    changeable: true
+    i18n:
+      en-US:
+        name: Home network (scan)
+        description: "Optional CIDR for LAN device scan, e.g. 192.168.2.0/24 (restart app after change)"
+      de-DE:
+        name: Heimnetz (Scan)
+        description: "Optional, Netz für Gerätesuche, z. B. 192.168.2.0/24 (nach Änderung App neu starten)"
+      zh-CN:
+        name: 局域网网段
+        description: "可选扫描网段，例如 192.168.2.0/24（更改后请重启应用）"
+      fr-FR:
+        name: Réseau domestique (scan)
+        description: "CIDR optionnel pour le scan LAN, p. ex. 192.168.2.0/24 (redémarrer l’app après modification)"
+      es-ES:
+        name: Red doméstica (escaneo)
+        description: "CIDR opcional para el escaneo LAN, p. ej. 192.168.2.0/24 (reinicie la app tras el cambio)"
+      it-IT:
+        name: Rete domestica (scan)
+        description: "CIDR opzionale per la scansione LAN, es. 192.168.2.0/24 (riavviare l’app dopo la modifica)"
+      pl-PL:
+        name: Sieć domowa (skan)
+        description: "Opcjonalny CIDR do skanowania LAN, np. 192.168.2.0/24 (po zmianie zrestartuj aplikację)"
+      ru-RU:
+        name: Домашняя сеть (скан)
+        description: "Необязательный CIDR для сканирования LAN, напр. 192.168.2.0/24 (после изменения перезапустите приложение)"
+      tr-TR:
+        name: Ev ağı (tarama)
+        description: "LAN taraması için isteğe bağlı CIDR, örn. 192.168.2.0/24 (değişiklikten sonra uygulamayı yeniden başlatın)"
+      hr-HR:
+        name: Kućna mreža (sken)
+        description: "Opcionalni CIDR za LAN skeniranje, npr. 192.168.2.0/24 (nakon promjene ponovno pokrenite aplikaciju)"
+  - key: SCAN_EXTRA_HOSTS
+    type: string
+    required: false
+    changeable: true
+    i18n:
+      en-US:
+        name: Extra hosts (scan)
+        description: "Optional comma-separated IPs always probed, e.g. 192.168.2.200"
+      de-DE:
+        name: Zusatz-IPs (Scan)
+        description: "Optional, kommagetrennt, z. B. 192.168.2.200"
+      zh-CN:
+        name: 额外主机
+        description: "可选额外扫描地址，逗号分隔，例如 192.168.2.200"
+      fr-FR:
+        name: Hôtes supplémentaires (scan)
+        description: "IPs optionnelles, séparées par des virgules, toujours sondées, p. ex. 192.168.2.200"
+      es-ES:
+        name: Hosts extra (escaneo)
+        description: "IPs opcionales separadas por comas, siempre sondeadas, p. ej. 192.168.2.200"
+      it-IT:
+        name: Host extra (scan)
+        description: "IP opzionali separati da virgola, sempre sondati, es. 192.168.2.200"
+      pl-PL:
+        name: Dodatkowe hosty (skan)
+        description: "Opcjonalne IP rozdzielone przecinkami, zawsze sprawdzane, np. 192.168.2.200"
+      ru-RU:
+        name: Доп. хосты (скан)
+        description: "Необязательные IP через запятую, всегда проверяются, напр. 192.168.2.200"
+      tr-TR:
+        name: Ek hostlar (tarama)
+        description: "İsteğe bağlı, virgülle ayrılmış ve her zaman yoklanan IP’ler, örn. 192.168.2.200"
+      hr-HR:
+        name: Dodatni hostovi (sken)
+        description: "Opcionalne IP adrese odvojene zarezom, uvijek se provjeravaju, npr. 192.168.2.200"
+i18n:
+  en-US:
+    name: Transfer Hub
+    description: "Copy or sync folders between a user-selected NAS folder, USB storage and LAN SMB devices. Profiles, schedules and live task progress. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/transferhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  de-DE:
+    name: Transfer Hub
+    description: "Ordner zwischen einem von Ihnen gewaehlten NAS-Ordner, USB-Speicher und LAN-SMB-Geraeten kopieren oder synchronisieren. Profile, Zeitplaene und Live-Fortschritt. Windows-Begleiter: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/transferhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  zh-CN:
+    name: Transfer Hub
+    description: "在您指定的 NAS 文件夹、USB 存储与局域网 SMB 设备之间复制或同步文件夹。支持配置文件、计划任务与实时任务进度。配套 Windows 应用：Ugreen NAS Admin。"
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/transferhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  fr-FR:
+    name: Transfer Hub
+    description: "Copiez ou synchronisez des dossiers entre un dossier NAS choisi, le stockage USB et des appareils SMB du LAN. Profils, planifications et progression en direct. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/transferhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  es-ES:
+    name: Transfer Hub
+    description: "Copie o sincronice carpetas entre una carpeta NAS elegida, almacenamiento USB y dispositivos SMB de la LAN. Perfiles, programaciones y progreso en vivo. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/transferhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  it-IT:
+    name: Transfer Hub
+    description: "Copia o sincronizza cartelle tra una cartella NAS scelta, storage USB e dispositivi SMB in LAN. Profili, pianificazioni e avanzamento in tempo reale. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/transferhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  pl-PL:
+    name: Transfer Hub
+    description: "Kopiuj lub synchronizuj foldery między wybranym folderem NAS, pamięcią USB i urządzeniami SMB w sieci LAN. Profile, harmonogramy i postęp na żywo. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/transferhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  ru-RU:
+    name: Transfer Hub
+    description: "Копируйте или синхронизируйте папки между выбранной папкой NAS, USB-хранилищем и SMB-устройствами в LAN. Профили, расписания и прогресс в реальном времени. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/transferhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  tr-TR:
+    name: Transfer Hub
+    description: "Seçtiğiniz bir NAS klasörü, USB depolama ve LAN SMB cihazları arasında klasörleri kopyalayın veya senkronize edin. Profiller, zamanlamalar ve canlı ilerleme. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/transferhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"
+  hr-HR:
+    name: Transfer Hub
+    description: "Kopirajte ili sinkronizirajte mape između odabrane NAS mape, USB pohrane i SMB uređaja u LAN-u. Profili, rasporedi i napredak uživo. Companion: Ugreen NAS Admin."
+    author: Runlevel
+    official: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps"
+    help: "https://github.com/runlevel1977-del/Runlevel-UGOS-Apps/blob/main/docs/help/transferhub.md"
+    publisher: Runlevel
+    publisher_link: "https://github.com/runlevel1977-del"

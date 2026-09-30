@@ -12,6 +12,9 @@ from compliance import (
     save_privacy_consent,
 )
 from flask import Flask, g, jsonify, make_response, render_template, request
+from ugos_auth import init_ugos_auth
+from transport_rsa import decrypt_wire_fields
+from rate_limit import allow as rate_allow
 
 from devices import (
     LOCAL_ID,
@@ -30,7 +33,7 @@ from devices import (
     update_smb_device,
 )
 from smb_cache import cache_summary, get_build_status, start_smb_cache_build
-from i18n import LANG_COOKIE, bundle, get_lang, lang_from_request, normalize_lang, t
+from i18n import LANG_COOKIE, LANG_LABELS, bundle, get_lang, lang_from_request, normalize_lang, t
 from icon_sync import sync_appcenter_icon
 from notify import public_settings, save_notify_settings, send_test_notifications
 from job_progress import list_active_jobs
@@ -41,7 +44,8 @@ from volumes import list_volumes, normalize_volume_id
 from wol import broadcast_for_ip, send_wol, wol_broadcast, wol_source_ips
 
 app = Flask(__name__)
-APP_VERSION = os.environ.get("WAKE_SYNC_VERSION", "0.1.31")
+init_ugos_auth(app)
+APP_VERSION = os.environ.get("WAKE_SYNC_VERSION", "0.1.45")
 APP_PORT = int(os.environ.get("WAKE_SYNC_PORT", "29120"))
 NAS_ADMIN_URL = os.environ.get(
     "NAS_ADMIN_URL",
@@ -59,6 +63,22 @@ def _lang_cookie_response(resp, lang: str):
     return resp
 
 
+def _decrypt_password_fields(obj: dict, *keys: str) -> None:
+    """Reject plaintext secrets/PII; accept RSA cipher fields (*_enc)."""
+    decrypt_wire_fields(DATA_DIR, obj, *(keys or ("password",)))
+
+
+def _plan_public(plan: dict) -> dict:
+    row = dict(plan)
+    row["target_ip_set"] = bool(str(row.get("target_ip") or "").strip())
+    row["target_mac_set"] = bool(str(row.get("target_mac") or "").strip())
+    if row["target_ip_set"]:
+        row["target_ip"] = ""
+    if row["target_mac_set"]:
+        row["target_mac"] = ""
+    return row
+
+
 @app.context_processor
 def _inject_i18n():
     lng = getattr(g, "lang", "en")
@@ -70,6 +90,7 @@ def _inject_i18n():
         "lang": lng,
         "t": _t,
         "i18n": bundle(lng),
+        "lang_labels": LANG_LABELS,
         "nas_admin_url": NAS_ADMIN_URL,
         **compliance_context(DATA_DIR),
     }
@@ -105,8 +126,9 @@ def _validate_source_endpoint(source: dict, lng: str) -> str | None:
     return None
 
 
-def _wol_target_from_dest(dest: dict, mac: str, ip: str) -> tuple[str, str]:
-    device_id = (dest.get("device_id") or "").strip()
+def _wol_target_from_remote(remote: dict, mac: str, ip: str) -> tuple[str, str]:
+    """WoL always targets the remote SMB NAS (never this NAS)."""
+    device_id = (remote.get("device_id") or "").strip()
     if not device_id or device_id == LOCAL_ID:
         return mac, ip
     dev = get_device(device_id)
@@ -119,6 +141,32 @@ def _wol_target_from_dest(dest: dict, mac: str, ip: str) -> tuple[str, str]:
     return mac, ip
 
 
+def _route_remote_endpoint(source: dict, dest: dict) -> tuple[dict | None, str | None]:
+    """Require exactly one local + one SMB endpoint. Return (smb_ep, 'push'|'pull')."""
+    src_dev = get_device(source.get("device_id", LOCAL_ID))
+    dst_dev = get_device(dest.get("device_id", LOCAL_ID))
+    src_type = (src_dev or {}).get("type")
+    dst_type = (dst_dev or {}).get("type")
+    if src_type == "local" and dst_type == "smb":
+        return dest, "push"
+    if src_type == "smb" and dst_type == "local":
+        return source, "pull"
+    return None, None
+
+
+def _validate_endpoint_side(ep: dict, lng: str, *, as_source: bool) -> str | None:
+    dev = get_device(ep.get("device_id", LOCAL_ID))
+    if not dev:
+        return t("err.device_not_found", lng)
+    if as_source:
+        return _validate_source_endpoint(ep, lng)
+    if dev.get("type") == "smb" and not ep.get("share"):
+        return t("err.smb_share_missing", lng)
+    if dev.get("type") == "local" and not ep.get("volume") and (ep.get("path") or ""):
+        return t("err.pick_volume_first", lng)
+    return None
+
+
 def _plan_fields_from_body(body: dict, lng: str, existing: dict | None = None) -> tuple[str | None, dict]:
     name = (body.get("name") or "").strip() or (existing or {}).get("name") or "Plan"
     source = body.get("source")
@@ -127,19 +175,24 @@ def _plan_fields_from_body(body: dict, lng: str, existing: dict | None = None) -
         return t("err.pick_both", lng), {}
     source = _normalize_endpoint(source)
     dest = _normalize_endpoint(dest)
-    src_err = _validate_source_endpoint(source, lng)
+    # Wake: this NAS always wakes the remote SMB peer.
+    # Sync: push (local→SMB) or pull (SMB→local). No self-wake / no reverse-wake.
+    remote_ep, direction = _route_remote_endpoint(source, dest)
+    if not remote_ep or not direction:
+        return t("err.route_local_and_smb", lng), {}
+    src_err = _validate_endpoint_side(source, lng, as_source=True)
     if src_err:
         return src_err, {}
+    dst_err = _validate_endpoint_side(dest, lng, as_source=False)
+    if dst_err:
+        return dst_err, {}
     mac = (body.get("target_mac") or "").strip()
     ip = (body.get("target_ip") or "").strip()
-    mac, ip = _wol_target_from_dest(dest, mac, ip)
+    mac, ip = _wol_target_from_remote(remote_ep, mac, ip)
     if not ip:
         return t("err.ip_missing", lng), {}
     if not mac:
         return t("err.mac_on_device", lng), {}
-    dest_dev = get_device(dest.get("device_id", ""))
-    if dest_dev and dest_dev.get("type") == "smb" and not dest.get("share"):
-        return t("err.smb_share_missing", lng), {}
     wake_bc = (body.get("wake_broadcast") or "").strip() or broadcast_for_ip(ip) or ""
     sched = normalize_schedule_fields(body, existing=existing)
     enabled_default = existing.get("enabled", True) if existing else True
@@ -166,7 +219,7 @@ def _plan_fields_from_body(body: dict, lng: str, existing: dict | None = None) -
 
 @app.route("/health")
 def health():
-    return jsonify({"ok": True, "version": APP_VERSION, "lang": get_lang()})
+    return jsonify({"ok": True})
 
 
 @app.route("/")
@@ -183,7 +236,7 @@ def api_set_lang():
     body = request.get_json(force=True, silent=True) or {}
     picked = normalize_lang(body.get("lang"))
     if not picked:
-        return jsonify({"ok": False, "error": "lang must be de or en"}), 400
+        return jsonify({"ok": False, "error": "unsupported lang"}), 400
     resp = jsonify({"ok": True, "lang": picked, "i18n": bundle(picked)})
     return _lang_cookie_response(resp, picked)
 
@@ -206,17 +259,15 @@ def api_config():
 @app.route("/api/wol/test", methods=["POST"])
 def api_test_wol():
     body = request.get_json(force=True, silent=True) or {}
-    mac = (body.get("mac") or "").strip()
-    ip = (body.get("target_ip") or body.get("ip") or "").strip()
-    if not mac:
-        dev = get_device((body.get("device_id") or "").strip())
-        if dev:
-            mac = (dev.get("mac") or "").strip()
-            ip = ip or (dev.get("host") or "").strip()
+    if str(body.get("mac") or "").strip() or str(body.get("target_ip") or "").strip() or str(body.get("ip") or "").strip():
+        return jsonify({"ok": False, "error": "Encrypted fields required"}), 400
+    dev = get_device((body.get("device_id") or "").strip())
+    mac = (dev.get("mac") or "").strip() if dev else ""
+    ip = (dev.get("host") or "").strip() if dev else ""
     if not mac:
         return jsonify({"ok": False, "error": t("err.mac_on_device", get_lang())}), 400
     ok, msg = send_wol(mac, target_ip=ip or None)
-    append_log(f"WOL test: {msg}")
+    append_log("WOL test requested")
     return jsonify({"ok": ok, "message": msg})
 
 
@@ -232,27 +283,38 @@ def api_devices():
     return jsonify(out)
 
 
+_MAC_RE = __import__("re").compile(r"^([0-9a-fA-F]{2}[:\-]){5}[0-9a-fA-F]{2}$")
+
+
 @app.route("/api/devices", methods=["POST"])
 def api_add_device():
-
     if not has_privacy_consent(DATA_DIR):
         body, code = consent_required_response()
         return jsonify(body), code
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    if not rate_allow("devices", ip, max_n=10, window_sec=300):
+        return jsonify({"ok": False, "error": "Too many attempts, try later"}), 429
     body = request.get_json(force=True, silent=True) or {}
     lng = get_lang()
+    try:
+        _decrypt_password_fields(body, "password", "host", "name", "username", "mac")
+    except ValueError:
+        return jsonify({"ok": False, "error": "Encrypted fields required"}), 400
     host = (body.get("host") or "").strip()
     name = (body.get("name") or host).strip()
     user = (body.get("username") or "").strip()
     password = body.get("password") or ""
     if not host:
         return jsonify({"ok": False, "error": "host missing"}), 400
+    mac = (body.get("mac") or "").strip()
+    if mac and not _MAC_RE.match(mac):
+        return jsonify({"ok": False, "error": "Invalid MAC address format"}), 400
     ok, msg = test_smb(host, user, password)
     if not ok:
         return jsonify({"ok": False, "error": msg}), 400
-    mac = (body.get("mac") or "").strip()
     dev = add_smb_device(name, host, user, password, mac=mac)
     start_smb_cache_build(dev, _list_smb_shares_live, _list_smb_dirs_live)
-    append_log(f"Target saved: {name} ({host}) — folder scan started")
+    append_log(f"Target saved: {name} — folder scan started")
     row = device_public_row(dev)
     row["folder_cache"] = cache_summary(dev["id"])
     return jsonify({"ok": True, "device": row, "cache_building": True})
@@ -261,15 +323,22 @@ def api_add_device():
 @app.route("/api/devices/<device_id>", methods=["PATCH"])
 def api_patch_device(device_id: str):
     body = request.get_json(force=True, silent=True) or {}
+    try:
+        _decrypt_password_fields(body, "name", "mac")
+    except ValueError:
+        return jsonify({"ok": False, "error": "Encrypted fields required"}), 400
     fields = {}
     if "name" in body:
         fields["name"] = body.get("name")
     if "mac" in body:
-        fields["mac"] = body.get("mac")
+        mac_val = (body.get("mac") or "").strip()
+        if mac_val and not _MAC_RE.match(mac_val):
+            return jsonify({"ok": False, "error": "Invalid MAC address format"}), 400
+        fields["mac"] = mac_val
     dev = update_smb_device(device_id, **fields)
     if not dev:
         return jsonify({"ok": False, "error": "device not found"}), 404
-    return jsonify({"ok": True, "device": {**dev, "password": "***", "folder_cache": cache_summary(device_id)}})
+    return jsonify({"ok": True, "device": device_public_row(dev)})
 
 
 @app.route("/api/devices/<device_id>/cache-status", methods=["GET"])
@@ -317,7 +386,7 @@ def api_list_plans():
     active = set(list_active_plans())
     out = []
     for p in load_plans():
-        row = p.copy()
+        row = _plan_public(p.copy())
         row["source_label"] = endpoint_label(row.get("source") or {})
         row["dest_label"] = endpoint_label(row.get("dest") or {})
         row["schedule_label"] = schedule_label(row, get_lang())
@@ -347,7 +416,7 @@ def api_create_plan():
     plans.append(plan)
     save_plans(plans)
     append_log(f"PLAN saved: {plan['name']}")
-    return jsonify({"ok": True, "plan": plan})
+    return jsonify({"ok": True, "plan": _plan_public(plan)})
 
 
 @app.route("/api/plans/<plan_id>", methods=["PATCH"])
@@ -371,7 +440,7 @@ def api_update_plan(plan_id: str):
             break
     save_plans(plans)
     append_log(f"PLAN updated: {updated.get('name', plan_id)}")
-    return jsonify({"ok": True, "plan": updated})
+    return jsonify({"ok": True, "plan": _plan_public(updated)})
 
 
 @app.route("/api/plans/<plan_id>/run", methods=["POST"])
@@ -414,6 +483,19 @@ def api_save_notifications():
         body, code = consent_required_response()
         return jsonify(body), code
     body = request.get_json(force=True, silent=True) or {}
+    try:
+        _decrypt_password_fields(
+            body,
+            "telegram_bot_token",
+            "smtp_password",
+            "telegram_chat_id",
+            "smtp_user",
+            "smtp_host",
+            "email_from",
+            "email_to",
+        )
+    except ValueError:
+        return jsonify({"ok": False, "error": "Encrypted fields required"}), 400
     return jsonify({"ok": True, "settings": save_notify_settings(body)})
 
 
@@ -436,7 +518,9 @@ def api_privacy_status():
 
 @app.route("/api/privacy/consent", methods=["POST"])
 def api_privacy_consent():
-    row = save_privacy_consent(DATA_DIR)
+    body = request.get_json(force=True, silent=True) or {}
+    accepted = bool(body.get("accepted", True)) and not bool(body.get("declined"))
+    row = save_privacy_consent(DATA_DIR, accepted=accepted)
     return jsonify({"ok": True, "consent": row})
 
 if __name__ == "__main__":

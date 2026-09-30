@@ -9,10 +9,12 @@
     body { font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); margin:0; padding:1.25rem; max-width:1100px; }
     .page-header { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:.5rem; }
     .page-header .title-block { flex:1; min-width:220px; }
-    .lang-switch { display:flex; align-items:center; gap:.35rem; flex-shrink:0; }
-    .lang-switch .lang-label { font-size:.8rem; color:var(--muted); margin-right:.25rem; }
-    .lang-switch button.lang-btn { background:#2a3545; color:var(--muted); margin:0; min-width:2.6rem; font-weight:600; }
-    .lang-switch button.lang-btn.active { background:var(--accent); color:#111; }
+    .lang-switch { display:flex; align-items:center; gap:.5rem; flex-shrink:0; }
+    .lang-switch .lang-label { font-size:.8rem; color:var(--muted); }
+    .lang-switch select {
+      background:#0f1419; color:var(--text); border:1px solid var(--border);
+      border-radius:6px; padding:.35rem .55rem; font-size:.85rem; min-width:7.5rem;
+    }
     h1 { color:var(--accent); margin:0 0 .25rem; }
     h2 { font-size:1.05rem; margin:0 0 .75rem; }
     .card { background:var(--card); border-radius:10px; padding:1.25rem; margin-bottom:1rem; }
@@ -49,10 +51,13 @@
       <p class="readonly-note">{{ t('app.readonly_note') }}</p>
       <p class="hint" style="margin-top:.65rem">{{ t('companion') }} <a href="{{ nas_admin_url }}" style="color:var(--accent)" target="_blank" rel="noopener">Ugreen NAS Admin</a></p>
     </div>
-    <div class="lang-switch" role="group" aria-label="{{ t('ui.language') }}">
-      <span class="lang-label">{{ t('ui.language') }}</span>
-      <button type="button" class="lang-btn{% if lang == 'de' %} active{% endif %}" onclick="setLang('de')"{% if lang == 'de' %} aria-current="true"{% endif %}>DE</button>
-      <button type="button" class="lang-btn{% if lang == 'en' %} active{% endif %}" onclick="setLang('en')"{% if lang == 'en' %} aria-current="true"{% endif %}>EN</button>
+    <div class="lang-switch">
+      <label class="lang-label" for="lang-select">{{ t('ui.language') }}</label>
+      <select id="lang-select" onchange="setLang(this.value)" aria-label="{{ t('ui.language') }}">
+        {% for code, label in lang_labels.items() %}
+        <option value="{{ code }}" {% if lang == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
     </div>
   </header>
 
@@ -129,6 +134,14 @@ async function setLang(lang) {
   if (r.ok) location.reload();
 }
 
+function outcomeLabel(o) {
+  const x = (o || '').toLowerCase();
+  if (x === 'ok') return tr('outcome.ok');
+  if (x === 'failed') return tr('outcome.failed');
+  if (x === 'session') return tr('outcome.session');
+  return o || '-';
+}
+
 function outcomeClass(o) {
   const x = (o || '').toLowerCase();
   if (x === 'ok') return 'outcome-ok';
@@ -143,7 +156,7 @@ function renderEvents(data) {
       <td>${ev.timestamp || '-'}</td>
       <td>${ev.ip || '-'}</td>
       <td>${ev.source || '-'}</td>
-      <td class="${outcomeClass(ev.outcome)}">${ev.outcome || '-'}</td>
+      <td class="${outcomeClass(ev.outcome)}">${outcomeLabel(ev.outcome)}</td>
       <td>${ev.user || '-'}</td>
       <td class="access-cell">${(ev.access || '—').replace(/</g,'&lt;')}</td>
       <td>${(ev.detail || '').replace(/</g,'&lt;')}</td>

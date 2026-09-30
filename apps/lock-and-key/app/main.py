@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import base64
 import os
 from io import BytesIO
 from pathlib import Path
@@ -12,8 +11,10 @@ from compliance import (
     save_privacy_consent,
 )
 from flask import Flask, g, jsonify, make_response, render_template, request, send_file
+from ugos_auth import init_ugos_auth
+from transport_rsa import decrypt_chunked, decrypt_oaep
 
-from i18n import LANG_COOKIE, bundle, lang_from_request, normalize_lang, t
+from i18n import LANG_COOKIE, LANG_LABELS, bundle, lang_from_request, normalize_lang, t
 from icon_sync import sync_appcenter_icon
 from store import DATA_DIR, append_log, get_job, load_vaults, read_log_tail
 from usb_bind import usb_rows_enriched
@@ -31,7 +32,8 @@ from vaults import (
 from volumes import list_volumes
 
 app = Flask(__name__)
-APP_VERSION = os.environ.get("LOCK_KEY_VERSION", "0.1.25")
+init_ugos_auth(app)
+APP_VERSION = os.environ.get("LOCK_KEY_VERSION", "0.1.32")
 APP_PORT = int(os.environ.get("LOCK_KEY_PORT", "8080"))
 NAS_ADMIN_URL = os.environ.get(
     "NAS_ADMIN_URL",
@@ -50,6 +52,45 @@ def _lang_cookie_response(resp, lang: str):
     return resp
 
 
+def _api_error(exc: Exception, code: int = 400):
+    from i18n import I18nError
+
+    if isinstance(exc, I18nError):
+        return jsonify(
+            {
+                "ok": False,
+                "error": str(exc),
+                "error_key": exc.key,
+                "error_params": exc.params,
+            }
+        ), code
+    return jsonify({"ok": False, "error": str(exc)}), code
+
+
+def _decrypt_secret_field(obj: dict, name: str) -> str:
+    if str(obj.get(name) or "").strip():
+        raise ValueError("plaintext passwords are not accepted")
+    enc = str(obj.get(f"{name}_enc") or "").strip()
+    if not enc:
+        return ""
+    try:
+        return decrypt_oaep(DATA_DIR, enc)
+    except Exception as exc:
+        raise ValueError("encrypted password required") from exc
+
+
+def _decrypt_key_file_field(obj: dict) -> bytes | None:
+    if str(obj.get("key_b64") or "").strip():
+        raise ValueError("plaintext key files are not accepted")
+    enc = str(obj.get("key_b64_enc") or "").strip()
+    if not enc:
+        return None
+    try:
+        return decrypt_chunked(DATA_DIR, enc)
+    except Exception as exc:
+        raise ValueError("encrypted key file required") from exc
+
+
 @app.context_processor
 def _inject_i18n():
     lng = getattr(g, "lang", "en")
@@ -61,6 +102,7 @@ def _inject_i18n():
         "lang": lng,
         "t": _t,
         "i18n": bundle(lng),
+        "lang_labels": LANG_LABELS,
         "nas_admin_url": NAS_ADMIN_URL,
         **compliance_context(DATA_DIR),
     }
@@ -68,7 +110,7 @@ def _inject_i18n():
 
 @app.route("/health")
 def health():
-    return jsonify({"ok": True, "version": APP_VERSION})
+    return jsonify({"ok": True})
 
 
 @app.route("/")
@@ -103,7 +145,7 @@ def api_browse():
         data = browse_dirs(volume, path)
         return jsonify({"ok": True, **data})
     except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return _api_error(exc)
 
 
 @app.route("/api/usb")
@@ -137,13 +179,14 @@ def api_vaults_rescan():
 def api_seal():
     body = request.get_json(force=True, silent=True) or {}
     try:
+        key_passphrase = _decrypt_secret_field(body, "key_passphrase")
         job_id, vault, key_bytes = create_seal_job(
             name=(body.get("name") or "").strip(),
             volume_id=(body.get("volume") or "1").strip(),
             subpath=(body.get("path") or "").strip(),
             bind_usb=bool(body.get("bind_usb")),
             usb_volume_id=(body.get("usb_volume") or "").strip(),
-            key_passphrase=(body.get("key_passphrase") or "").strip(),
+            key_passphrase=key_passphrase,
         )
         _pending_keys[vault["id"]] = key_bytes
         return jsonify(
@@ -155,7 +198,10 @@ def api_seal():
             }
         )
     except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        err = str(exc)
+        if "plaintext" in err.lower() or "encrypted" in err.lower() or "ciphertext" in err.lower():
+            return jsonify({"ok": False, "error": "Encrypted secrets required"}), 400
+        return _api_error(exc)
 
 
 @app.route("/api/vaults/<vault_id>/keyfile")
@@ -183,20 +229,15 @@ def api_keyfile_usb(vault_id: str):
         path = write_key_to_usb((body.get("usb_volume") or "").strip(), vault_id, data)
         return jsonify({"ok": True, "path": path})
     except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return _api_error(exc)
 
 
 @app.route("/api/vaults/<vault_id>/unlock", methods=["POST"])
 def api_unlock(vault_id: str):
     body = request.get_json(force=True, silent=True) or {}
-    key_bytes = None
-    if body.get("key_b64"):
-        try:
-            key_bytes = base64.b64decode(body.get("key_b64") or "")
-        except Exception:
-            return jsonify({"ok": False, "error": "invalid key_b64"}), 400
-    key_passphrase = (body.get("key_passphrase") or "").strip()
     try:
+        key_bytes = _decrypt_key_file_field(body)
+        key_passphrase = _decrypt_secret_field(body, "key_passphrase")
         job_id = create_unlock_job(
             vault_id,
             key_bytes=key_bytes,
@@ -205,20 +246,18 @@ def api_unlock(vault_id: str):
         )
         return jsonify({"ok": True, "job_id": job_id})
     except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        err = str(exc)
+        if "plaintext" in err.lower() or "encrypted" in err.lower() or "ciphertext" in err.lower():
+            return jsonify({"ok": False, "error": "Encrypted secrets required"}), 400
+        return _api_error(exc)
 
 
 @app.route("/api/vaults/<vault_id>/relock", methods=["POST"])
 def api_relock(vault_id: str):
     body = request.get_json(force=True, silent=True) or {}
-    key_bytes = None
-    if body.get("key_b64"):
-        try:
-            key_bytes = base64.b64decode(body.get("key_b64") or "")
-        except Exception:
-            return jsonify({"ok": False, "error": "invalid key_b64"}), 400
-    key_passphrase = (body.get("key_passphrase") or "").strip()
     try:
+        key_bytes = _decrypt_key_file_field(body)
+        key_passphrase = _decrypt_secret_field(body, "key_passphrase")
         job_id = create_relock_job(
             vault_id,
             key_bytes=key_bytes,
@@ -227,7 +266,10 @@ def api_relock(vault_id: str):
         )
         return jsonify({"ok": True, "job_id": job_id})
     except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        err = str(exc)
+        if "plaintext" in err.lower() or "encrypted" in err.lower() or "ciphertext" in err.lower():
+            return jsonify({"ok": False, "error": "Encrypted secrets required"}), 400
+        return _api_error(exc)
 
 
 @app.route("/api/vaults/<vault_id>", methods=["DELETE"])
@@ -238,7 +280,7 @@ def api_delete_vault(vault_id: str):
         ok = remove_vault_record(vault_id, force=force)
         return jsonify({"ok": ok})
     except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return _api_error(exc)
 
 
 @app.route("/api/jobs/<job_id>")
@@ -262,7 +304,9 @@ def api_privacy_status():
 
 @app.route("/api/privacy/consent", methods=["POST"])
 def api_privacy_consent():
-    row = save_privacy_consent(DATA_DIR)
+    body = request.get_json(force=True, silent=True) or {}
+    accepted = bool(body.get("accepted", True)) and not bool(body.get("declined"))
+    row = save_privacy_consent(DATA_DIR, accepted=accepted)
     return jsonify({"ok": True, "consent": row})
 
 if __name__ == "__main__":

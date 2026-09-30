@@ -189,17 +189,58 @@ def _lsblk_transport_for_device(device: str) -> dict[str, str]:
     return disk_hints or part_hints
 
 
+def _sysfs_disk_name(device: str) -> str:
+    name = Path((device or "").strip()).name
+    if not name:
+        return ""
+    return _disk_name_from_partition(name) or re.sub(r"\d+$", "", name, flags=re.I)
+
+
+def _sysfs_usb_hint(device: str) -> str:
+    """Return 'usb', 'internal', or '' using host /sys (no /dev needed)."""
+    disk = _sysfs_disk_name(device)
+    part = Path((device or "").strip()).name
+    candidates = [p for p in (Path(f"/sys/block/{disk}") if disk else None, Path(f"/sys/class/block/{part}") if part else None) if p]
+    resolved = ""
+    for path in candidates:
+        try:
+            if path.exists():
+                resolved = str(path.resolve()).lower()
+                break
+        except OSError:
+            continue
+    if "/usb" in resolved:
+        return "usb"
+    if any(token in resolved for token in ("/nvme", "/ata", "/sata", "/mmc", "/virtio")):
+        return "internal"
+    if disk:
+        rem = Path(f"/sys/block/{disk}/removable")
+        try:
+            if rem.is_file() and rem.read_text(encoding="ascii", errors="ignore").strip() == "1":
+                return "usb"
+        except OSError:
+            pass
+    return ""
+
+
 def device_is_usb_transport(device: str, mount_tran: str = "") -> bool:
     """
     True only for hot-pluggable USB block devices.
 
     UGOS may expose internal SATA disks under ``/mnt/@usb``; matching folder
     names like ``sda1`` is not enough — check kernel transport metadata.
+    Inside Docker, lsblk/udevadm often fail (no /dev); then use /sys.
     """
     tran = (mount_tran or "").strip().lower()
     if tran == "usb":
         return True
     if tran in _INTERNAL_TRAN:
+        return False
+
+    sys_hint = _sysfs_usb_hint(device)
+    if sys_hint == "usb":
+        return True
+    if sys_hint == "internal":
         return False
 
     hints = _lsblk_transport_for_device(device)
@@ -216,6 +257,9 @@ def device_is_usb_transport(device: str, mount_tran: str = "") -> bool:
         return True
     if bus in ("ata", "scsi") and tran in ("sata", "ata", ""):
         return False
+    name = Path((device or "").strip()).name
+    if _UGOS_USB_PART.match(name) and not tran and not bus:
+        return True
     return False
 
 

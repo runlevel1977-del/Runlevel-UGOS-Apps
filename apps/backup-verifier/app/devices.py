@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from os import scandir
 import tempfile
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from path_filters import is_hidden_name, parse_smbclient_ls_line
+from secret_box import decrypt_secret, encrypt_secret
 from store import DATA_DIR, append_log, new_job_id
 from volumes import list_volumes, normalize_volume_id, resolve_local_path, volume_label
 
@@ -20,6 +22,45 @@ DEVICES_FILE = DATA_DIR / "devices.json"
 LOCAL_ID = "local"
 NAS_MOUNT = os.environ.get("NAS_MOUNT", "/mnt/nas")
 WORK_MOUNT = Path("/mnt/work")
+_HOST_RE = re.compile(
+    r"^(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*"
+    r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
+    r"|(?:\d{1,3}\.){3}\d{1,3})$"
+)
+_SHARE_RE = re.compile(r"^[^\\/\[\]:;|<>+?=*\x00-\x1f\"'`$]{1,80}$")
+_USER_RE = re.compile(r"^[^%\r\n\"'`$]{0,128}$")
+
+
+def validate_smb_host(host: str) -> str:
+    h = (host or "").strip()
+    if not h or not _HOST_RE.match(h) or "/" in h:
+        raise ValueError("Invalid host")
+    return h
+
+
+def validate_smb_share(share: str) -> str:
+    s = (share or "").strip().strip("/").replace("\\", "/")
+    if not s or not _SHARE_RE.match(s) or ".." in s:
+        raise ValueError("Invalid share")
+    return s
+
+
+def validate_smb_relpath(path: str) -> str:
+    rel = (path or "").strip().strip("/").replace("\\", "/")
+    if not rel:
+        return ""
+    if any(p in (".", "..") for p in rel.split("/")):
+        raise ValueError("Invalid path")
+    if any(c in rel for c in '\\:;|<>?*`"\'$\n\r'):
+        raise ValueError("Invalid path")
+    return rel
+
+
+def validate_smb_username(username: str) -> str:
+    u = str(username or "")
+    if not _USER_RE.match(u):
+        raise ValueError("Invalid username")
+    return u
 
 
 def _ensure() -> None:
@@ -37,13 +78,30 @@ def load_devices() -> list[dict[str, Any]]:
         return [_default_local()]
     if not any(d.get("id") == LOCAL_ID for d in data):
         data.insert(0, _default_local())
+    if any(
+        d.get("type") == "smb"
+        and d.get("password")
+        and not str(d.get("password") or "").startswith("enc:v1:")
+        for d in data
+    ):
+        save_devices(data)
+        with DEVICES_FILE.open(encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, list):
+            return [_default_local()]
     return data
 
 
 def save_devices(devices: list[dict[str, Any]]) -> None:
     _ensure()
+    out: list[dict[str, Any]] = []
+    for raw in devices:
+        row = dict(raw)
+        if row.get("type") == "smb":
+            row["password"] = encrypt_secret(DATA_DIR, str(row.get("password") or ""))
+        out.append(row)
     with DEVICES_FILE.open("w", encoding="utf-8") as f:
-        json.dump(devices, f, indent=2, ensure_ascii=False)
+        json.dump(out, f, indent=2, ensure_ascii=False)
 
 
 def _default_local() -> dict[str, Any]:
@@ -58,11 +116,27 @@ def _default_local() -> dict[str, Any]:
 
 
 def get_device(device_id: str) -> dict[str, Any] | None:
-    return next((d for d in load_devices() if d.get("id") == device_id), None)
+    found = next((d for d in load_devices() if d.get("id") == device_id), None)
+    if not found:
+        return None
+    row = dict(found)
+    if row.get("type") == "smb":
+        row["password"] = decrypt_secret(DATA_DIR, str(row.get("password") or ""))
+    return row
+
+
+def device_public_row(device: dict[str, Any]) -> dict[str, Any]:
+    row = {k: v for k, v in device.items() if k != "password"}
+    if device.get("type") == "smb":
+        row["password_set"] = bool(device.get("password"))
+        row["username_set"] = bool(device.get("username"))
+        row["username"] = ""
+    return row
 
 
 def add_smb_device(name: str, host: str, username: str, password: str) -> dict[str, Any]:
-    host = host.strip()
+    host = validate_smb_host(host)
+    username = validate_smb_username(username)
     dev = {
         "id": "dev_" + new_job_id(),
         "name": (name or host).strip(),
@@ -92,24 +166,36 @@ def _smb_cred_args(username: str, password: str) -> list[str]:
 
 
 def test_smb(host: str, username: str, password: str) -> tuple[bool, str]:
+    from store import redact_secrets
+
+    try:
+        host = validate_smb_host(host)
+        username = validate_smb_username(username)
+    except ValueError as ex:
+        return False, str(ex)
     cmd = ["smbclient", "-L", f"//{host}", *_smb_cred_args(username, password), "-g"]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if proc.returncode != 0:
             err = (proc.stderr or proc.stdout or "").strip().splitlines()[-1:]
-            return False, err[0] if err else "SMB-Verbindung fehlgeschlagen"
+            msg = err[0] if err else "SMB-Verbindung fehlgeschlagen"
+            return False, redact_secrets(msg)
         return True, "Verbunden"
     except Exception as e:
-        return False, str(e)
+        return False, redact_secrets(str(e))
 
 
 def list_smb_shares(device: dict[str, Any]) -> list[dict[str, str]]:
-    host = device["host"]
+    try:
+        host = validate_smb_host(str(device.get("host") or ""))
+        username = validate_smb_username(str(device.get("username") or ""))
+    except ValueError:
+        return []
     cmd = [
         "smbclient",
         "-L",
         f"//{host}",
-        *_smb_cred_args(device.get("username", ""), device.get("password", "")),
+        *_smb_cred_args(username, device.get("password", "")),
         "-g",
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -124,15 +210,22 @@ def list_smb_shares(device: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def _smb_list_dirs(device: dict[str, Any], share: str, subpath: str) -> list[dict[str, str]]:
-    sub = (subpath or "").strip().strip("/").replace("\\", "/")
-    cd = f'cd "{sub}";' if sub else ""
+    try:
+        host = validate_smb_host(str(device.get("host") or ""))
+        share = validate_smb_share(share)
+        sub = validate_smb_relpath(subpath)
+        username = validate_smb_username(str(device.get("username") or ""))
+    except ValueError:
+        return []
     cmd = [
         "smbclient",
-        f"//{device['host']}/{share}",
-        *_smb_cred_args(device.get("username", ""), device.get("password", "")),
+        f"//{host}/{share}",
+        *_smb_cred_args(username, device.get("password", "")),
         "-c",
-        f"{cd} ls",
+        "ls",
     ]
+    if sub:
+        cmd.extend(["-D", sub])
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     entries: list[dict[str, str]] = []
     if proc.returncode != 0:
@@ -171,6 +264,15 @@ def list_local_dirs(volume_id: str, subpath: str) -> list[dict[str, str]]:
         target = resolve_local_path(volume_id, subpath)
     except ValueError:
         return []
+    try:
+        real_target = target.resolve()
+        mount = resolve_local_path(volume_id, "").resolve()
+        if not str(real_target).startswith(str(mount)):
+            append_log(f"browse: path traversal rejected: {target}")
+            return []
+    except (OSError, ValueError):
+        return []
+    target = real_target
     if not target.is_dir():
         return []
     rel = (subpath or "").strip().strip("/")
@@ -191,24 +293,6 @@ def list_local_dirs(volume_id: str, subpath: str) -> list[dict[str, str]]:
                 entries.append({"name": name, "path": p, "kind": "dir"})
     except OSError as e:
         append_log(f"Ordnerliste {target}: {e}")
-    if not entries:
-        try:
-            proc = subprocess.run(
-                ["ls", "-1A", str(target)],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            if proc.returncode == 0:
-                for name in (proc.stdout or "").splitlines():
-                    if is_hidden_name(name):
-                        continue
-                    full = target / name
-                    if full.is_dir():
-                        p = f"{rel}/{name}".strip("/") if rel else name
-                        entries.append({"name": name, "path": p, "kind": "dir"})
-        except OSError as e:
-            append_log(f"ls {target}: {e}")
     return sorted(entries, key=lambda x: x["name"].lower())
 
 
@@ -267,6 +351,11 @@ def browse(device_id: str, path: str = "", share: str = "", volume: str = "") ->
                 "parent": "",
                 "entries": list_smb_shares(device),
             }
+        try:
+            share = validate_smb_share(share)
+            path = validate_smb_relpath(path or "")
+        except ValueError:
+            return {"ok": False, "error": t("err.generic", lng)}
         return {
             "ok": True,
             "device_id": device_id,
@@ -317,13 +406,11 @@ def rclone_remote_url(ep: dict[str, Any]) -> str:
         vol = normalize_volume_id(ep.get("volume"))
         return str(resolve_local_path(vol, ep.get("path") or "").resolve())
     if device.get("type") == "smb":
-        share = (ep.get("share") or "").strip()
-        if not share:
-            raise ValueError("SMB-Freigabe fehlt")
-        host = _conn_value(device["host"].strip())
-        user = _conn_value((device.get("username") or "").strip())
+        share = validate_smb_share(ep.get("share") or "")
+        host = _conn_value(validate_smb_host(str(device.get("host") or "")))
+        user = _conn_value(validate_smb_username(str(device.get("username") or "")))
         pw = _rclone_obscure_password(device.get("password") or "")
-        sub = (ep.get("path") or "").strip().strip("/")
+        sub = validate_smb_relpath(ep.get("path") or "")
         remote_path = f"{share}/{sub}" if sub else share
         domain = _conn_value((device.get("domain") or "WORKGROUP").strip())
         return (
@@ -338,15 +425,23 @@ def smb_delete_source_tree(
     device: dict[str, Any], share: str, subpath: str
 ) -> tuple[bool, str]:
     """Delete transferred files on SMB share (fallback when rclone delete fails)."""
-    sub = (subpath or "").strip().strip("/")
-    cd = f'cd "{sub}";' if sub else ""
+    try:
+        host = validate_smb_host(str(device.get("host") or ""))
+        share = validate_smb_share(share)
+        sub = validate_smb_relpath(subpath)
+        username = validate_smb_username(str(device.get("username") or ""))
+    except ValueError as ex:
+        return False, str(ex)
+    creds = _smb_cred_args(username, device.get("password", ""))
     cmd = [
         "smbclient",
-        f"//{device['host']}/{share}",
-        *_smb_cred_args(device.get("username", ""), device.get("password", "")),
+        f"//{host}/{share}",
+        *creds,
         "-c",
-        f"{cd}recurse ON; prompt OFF; mdelete *",
+        "recurse ON; prompt OFF; mdelete *",
     ]
+    if sub:
+        cmd.extend(["-D", sub])
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
         out = (proc.stdout or proc.stderr or "").strip()
@@ -356,11 +451,13 @@ def smb_delete_source_tree(
         for _ in range(8):
             rmdir = [
                 "smbclient",
-                f"//{device['host']}/{share}",
-                *_smb_cred_args(device.get("username", ""), device.get("password", "")),
+                f"//{host}/{share}",
+                *creds,
                 "-c",
-                f"{cd}recurse ON; prompt OFF; rmdir *",
+                "recurse ON; prompt OFF; rmdir *",
             ]
+            if sub:
+                rmdir.extend(["-D", sub])
             proc2 = subprocess.run(rmdir, capture_output=True, text=True, timeout=120)
             if proc2.returncode != 0:
                 break

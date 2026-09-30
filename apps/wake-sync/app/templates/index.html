@@ -27,11 +27,12 @@
     .job-stop { margin-top:0.45rem; font-size:0.82rem; padding:0.3rem 0.65rem; }
     .page-header { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:.5rem; }
     .page-header .title-block { flex:1; min-width:220px; }
-    .lang-switch { display:flex; align-items:center; gap:.35rem; flex-shrink:0; }
-    .lang-switch .lang-label { font-size:.8rem; color:var(--muted); margin-right:.25rem; }
-    .lang-switch button.lang-btn { background:#2a3545; color:var(--muted); margin:0; min-width:2.6rem; font-weight:600; }
-    .lang-switch button.lang-btn.active { background:var(--accent); color:#111; }
-    .lang-switch button.lang-btn:not(.active):hover { color:var(--text); }
+    .lang-switch { display:flex; align-items:center; gap:.5rem; flex-shrink:0; }
+    .lang-switch .lang-label { font-size:.8rem; color:var(--muted); }
+    .lang-switch select {
+      background:#0f1419; color:var(--text); border:1px solid var(--border);
+      border-radius:6px; padding:.35rem .55rem; font-size:.85rem; min-width:7.5rem;
+    }
     h1 { color:var(--accent); margin:0 0 .25rem; }
     h2 { font-size:1.05rem; margin:0 0 .75rem; }
     .card { background:var(--card); border-radius:10px; padding:1.25rem; margin-bottom:1rem; }
@@ -72,10 +73,13 @@
       <p class="hint">{{ t('app.intro') }}<br>{{ t('app.wol_hint') }} <span id="wol-bc"></span></p>
       <p class="hint">{{ t('companion') }} <a href="{{ nas_admin_url }}" style="color:var(--accent)" target="_blank" rel="noopener">Ugreen NAS Admin</a></p>
     </div>
-    <div class="lang-switch" role="group" aria-label="{{ t('ui.language') }}">
-      <span class="lang-label">{{ t('ui.language') }}</span>
-      <button type="button" class="lang-btn{% if lang == 'de' %} active{% endif %}" onclick="setLang('de')"{% if lang == 'de' %} aria-current="true"{% endif %}>DE</button>
-      <button type="button" class="lang-btn{% if lang == 'en' %} active{% endif %}" onclick="setLang('en')"{% if lang == 'en' %} aria-current="true"{% endif %}>EN</button>
+    <div class="lang-switch">
+      <label class="lang-label" for="lang-select">{{ t('ui.language') }}</label>
+      <select id="lang-select" onchange="setLang(this.value)" aria-label="{{ t('ui.language') }}">
+        {% for code, label in lang_labels.items() %}
+        <option value="{{ code }}" {% if lang == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
     </div>
   </header>
 
@@ -127,8 +131,13 @@
         </select>
       </label>
     </div>
+    <p class="hint">{{ t('plan.direction_hint') }}</p>
+    <div class="pick" style="gap:1.25rem;margin:.5rem 0 .75rem">
+      <label><input type="radio" name="syncDir" value="push" checked onchange="onSyncDirChange()" /> {{ t('plan.dir_push') }}</label>
+      <label><input type="radio" name="syncDir" value="pull" onchange="onSyncDirChange()" /> {{ t('plan.dir_pull') }}</label>
+    </div>
     <p class="hint">{{ t('plan.wol_info') }} <span id="wolPreview"></span></p>
-    <p><strong>{{ t('plan.source') }}</strong></p>
+    <p><strong id="srcTitle">{{ t('plan.source') }}</strong></p>
     <p class="hint">{{ t('job.sync_incremental_hint') }}</p>
     <div class="pick">
       <select id="src-device" style="min-width:180px"></select>
@@ -137,7 +146,7 @@
     <p class="hint" style="margin:.25rem 0 .35rem">{{ t('job.selected_folders') }}</p>
     <div class="folder-chips" id="src-selected"></div>
     <p class="hint" id="src-empty-hint">{{ t('job.pick_none') }}</p>
-    <p><strong>{{ t('plan.dest') }}</strong></p>
+    <p><strong id="dstTitle">{{ t('plan.dest') }}</strong></p>
     <div class="pick">
       <select id="dst-device" style="min-width:180px"></select>
       <span class="sel" id="dst-label">{{ t('job.pick_none') }}</span>
@@ -169,6 +178,7 @@
       <label style="margin-left:1rem"><input type="checkbox" id="notifyOk" /> {{ t('notify.on_success') }}</label></p>
       <p>Telegram: <input id="tgToken" type="password" placeholder="token" /> Chat <input id="tgChat" /></p>
       <p>SMTP: <input id="smtpHost" placeholder="host" /> : <input id="smtpPort" value="587" style="width:70px" /></p>
+      <p>SMTP user <input id="smtpUser" /> password <input id="smtpPass" type="password" /></p>
       <p>To: <input id="emailTo" type="email" /></p>
       <button type="button" onclick="saveNotify()">{{ t('notify.save') }}</button>
       <button type="button" class="secondary" onclick="testNotify()">{{ t('notify.test') }}</button>
@@ -223,7 +233,31 @@
     const LANG = {{ lang|tojson }};
     const I18N = {{ i18n|tojson }};
     const LANG_COOKIE = 'ws_lang';
-    function T(k){ return I18N[k]||k; }
+    function T(k, params){
+      let s = I18N[k]||k;
+      if(params && typeof params === 'object'){
+        for(const [key,val] of Object.entries(params)){
+          s = s.split('{'+key+'}').join(String(val));
+        }
+      }
+      return s;
+    }
+    function planLastMessage(p){
+      if(p.last_message_key) return T(p.last_message_key, p.last_message_params||{});
+      if(p.last_status==='ok') return T('plan.ok');
+      if(p.last_status==='cancelled') return T('plan.cancelled');
+      if(p.last_status==='running') return T('plan.running');
+      return p.last_message || '';
+    }
+    function jobDetail(j){
+      if(j.message_key) return T(j.message_key, j.message_params||{});
+      if(j.detail_key) return T(j.detail_key, j.message_params||{});
+      if(j.phase==='wol' || j.phase==='wait' || j.phase==='sync'){
+        const key = 'jobs.phase.'+j.phase;
+        if(I18N[key] && (!j.detail || j.detail === I18N[key] || !/[\/%]/.test(j.detail))) return T(key);
+      }
+      return j.detail || '';
+    }
 
     async function setLang(code) {
       if (code === LANG) return;
@@ -255,8 +289,87 @@
       return '';
     }
 
-    function deviceOptionsHtml(){
-      return devices.map(d=>'<option value="'+esc(d.id)+'">'+esc(d.name)+' ('+esc(d.type)+')</option>').join('');
+    function deviceOptionsHtml(filterType){
+      return devices
+        .filter(d => !filterType || d.type === filterType)
+        .map(d=>'<option value="'+esc(d.id)+'">'+esc(d.name)+' ('+esc(d.type)+')</option>')
+        .join('');
+    }
+
+    function syncDir(){
+      const el = document.querySelector('input[name=syncDir]:checked');
+      return el ? el.value : 'push';
+    }
+
+    function setSyncDir(dir){
+      const el = document.querySelector('input[name=syncDir][value="'+(dir==='pull'?'pull':'push')+'"]');
+      if(el) el.checked = true;
+    }
+
+    function remoteSelectId(){
+      return syncDir()==='push' ? 'dst-device' : 'src-device';
+    }
+
+    function remoteDevice(){
+      const id = document.getElementById(remoteSelectId()).value;
+      return devices.find(d => d.id === id && d.type === 'smb') || null;
+    }
+
+    function onSyncDirChange(){
+      srcPaths = [];
+      dstSel = null;
+      refreshSrcSelected();
+      document.getElementById('dst-label').textContent = T('job.pick_none');
+      refreshDeviceSelects();
+    }
+
+    function refreshDeviceSelects(){
+      const dir = syncDir();
+      const srcEl = document.getElementById('src-device');
+      const dstEl = document.getElementById('dst-device');
+      const prevRemote = document.getElementById(remoteSelectId()).value;
+      const localOpts = deviceOptionsHtml('local') || ('<option value="local">'+esc(T('device.this_nas'))+'</option>');
+      const smbOpts = deviceOptionsHtml('smb');
+      const smbHtml = smbOpts
+        ? ('<option value="">'+esc(T('plan.remote_pick'))+'</option>' + smbOpts)
+        : ('<option value="">'+esc(T('plan.remote_none'))+'</option>');
+
+      if(dir === 'push'){
+        srcEl.innerHTML = localOpts;
+        srcEl.value = 'local';
+        srcEl.disabled = true;
+        dstEl.innerHTML = smbHtml;
+        dstEl.disabled = false;
+        if(prevRemote && [...dstEl.options].some(o => o.value === prevRemote)) dstEl.value = prevRemote;
+        else if(smbOpts && dstEl.options.length > 1) dstEl.selectedIndex = 1;
+        document.getElementById('srcTitle').textContent = T('plan.source_local');
+        document.getElementById('dstTitle').textContent = T('plan.dest_remote');
+      } else {
+        dstEl.innerHTML = localOpts;
+        dstEl.value = 'local';
+        dstEl.disabled = true;
+        srcEl.innerHTML = smbHtml;
+        srcEl.disabled = false;
+        if(prevRemote && [...srcEl.options].some(o => o.value === prevRemote)) srcEl.value = prevRemote;
+        else if(smbOpts && srcEl.options.length > 1) srcEl.selectedIndex = 1;
+        document.getElementById('srcTitle').textContent = T('plan.source_remote');
+        document.getElementById('dstTitle').textContent = T('plan.dest_local');
+      }
+      srcEl.onchange = ()=>{
+        if(syncDir()==='pull'){
+          srcPaths = [];
+          refreshSrcSelected();
+        }
+        updateWolPreview();
+      };
+      dstEl.onchange = ()=>{
+        if(syncDir()==='push'){
+          dstSel = null;
+          document.getElementById('dst-label').textContent = T('job.pick_none');
+        }
+        updateWolPreview();
+      };
+      updateWolPreview();
     }
 
     function srcPathKey(ep){
@@ -381,13 +494,10 @@
       devices = await (await fetch('/api/devices')).json();
       const tb = document.getElementById('devices-body');
       tb.innerHTML = '';
-      const opts = deviceOptionsHtml();
-      document.getElementById('src-device').innerHTML = opts;
-      document.getElementById('dst-device').innerHTML = opts.replace(/value="local"/,'');
-      document.getElementById('dst-device').onchange = updateWolPreview;
+      refreshDeviceSelects();
       for(const d of devices.filter(x=>x.type==='smb')){
         const tr = document.createElement('tr');
-        const macIn = '<input value="'+esc(d.mac||'')+'" placeholder="aa:bb:cc:dd:ee:ff" style="min-width:150px" onchange="patchMac(\''+esc(d.id)+'\',this.value)" />';
+        const macIn = '<input value="" placeholder="'+(d.mac_set ? esc(T('notify.token_saved')) : 'aa:bb:cc:dd:ee:ff')+'" style="min-width:150px" onchange="patchMac(\''+esc(d.id)+'\',this.value)" />';
         const fc = d.folder_cache||{};
         let cacheTxt = fc.building ? T('devices.cache_building')
           : (fc.ready ? (fc.partial ? T('devices.cache_partial') : T('devices.cache_ready')) : T('devices.cache_missing'));
@@ -395,7 +505,8 @@
           + (fc.ready && fc.cached_at ? '<br><small class="hint">'+esc(fc.cached_at)+'</small>' : '')
           + '<br><button type="button" class="secondary" onclick="refreshCache(\''+esc(d.id)+'\')">'+esc(T('devices.refresh_cache'))+'</button>'
           + ' <button type="button" class="secondary" onclick="testWol(\''+esc(d.id)+'\')">'+esc(T('devices.wol_test'))+'</button>';
-        tr.innerHTML = '<td>'+esc(d.name)+'</td><td>'+esc(d.host)+'</td><td>'+macIn+'</td><td>'+cacheCell+'</td><td><button class="danger" onclick="delDev(\''+esc(d.id)+'\')">×</button></td>';
+        const hostTxt = d.host_set ? T('notify.token_saved') : (d.host || '—');
+        tr.innerHTML = '<td>'+esc(d.name)+'</td><td>'+esc(hostTxt)+'</td><td>'+macIn+'</td><td>'+cacheCell+'</td><td><button class="danger" onclick="delDev(\''+esc(d.id)+'\')">×</button></td>';
         tb.appendChild(tr);
       }
       updateWolPreview();
@@ -408,21 +519,22 @@
     }
 
     function updateWolPreview(){
-      const sel = document.getElementById('dst-device');
-      const dev = devices.find(d=>d.id===sel.value);
       const el = document.getElementById('wolPreview');
+      const dev = remoteDevice();
       if(!dev){ el.textContent=''; return; }
       const ip = dev.host||'';
       const mac = (dev.mac||'').trim();
-      const bc = wolBroadcastForIp(ip);
-      if(mac) el.textContent = T('plan.wol_preview').replace('{ip}', ip).replace('{mac}', mac).replace('{bc}', bc);
-      else el.textContent = T('plan.wol_preview_missing').replace('{ip}', ip);
+      if(dev.mac_set || mac) el.textContent = T('plan.wol_preview_saved');
+      else el.textContent = T('plan.wol_preview_missing').replace('{ip}', ip || '—');
     }
 
     async function patchMac(id, mac){
-      await fetch('/api/devices/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({mac})});
+      const body = {};
+      try { await encryptField(body, 'mac', mac); } catch(e) { return; }
+      if (!body.mac_enc) return;
+      await fetch('/api/devices/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const d = devices.find(x=>x.id===id);
-      if(d) d.mac = mac;
+      if(d){ d.mac = ''; d.mac_set = true; }
       updateWolPreview();
     }
 
@@ -478,14 +590,33 @@
       document.getElementById('modal-dev').classList.add('open');
     }
 
+    async function encryptSecret(plain) {
+      if (!plain) return '';
+      if (typeof window.rlEncryptSecret !== 'function') {
+        throw new Error('encryption unavailable');
+      }
+      return window.rlEncryptSecret(plain);
+    }
+
+    async function encryptField(body, name, value) {
+      const v = String(value || '').trim();
+      if (!v) return;
+      body[name + '_enc'] = await encryptSecret(v);
+    }
+
     async function saveDev(){
       const btn = document.getElementById('md-save-btn');
       const errEl = document.getElementById('md-err');
       btn.disabled = true;
       errEl.textContent = T('devices.scanning_cache');
       try {
-        const body = { host: document.getElementById('md-host').value, name: document.getElementById('dev-name').value||document.getElementById('md-host').value,
-          mac: document.getElementById('md-mac').value, username: document.getElementById('md-user').value, password: document.getElementById('md-pass').value };
+        const body = {};
+        await encryptField(body, 'host', document.getElementById('md-host').value);
+        await encryptField(body, 'name', document.getElementById('dev-name').value||document.getElementById('md-host').value);
+        await encryptField(body, 'mac', document.getElementById('md-mac').value);
+        await encryptField(body, 'username', document.getElementById('md-user').value);
+        const pw = document.getElementById('md-pass').value;
+        if (pw) body.password_enc = await encryptSecret(pw);
         const r = await fetch('/api/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
         let j;
         try { j = await r.json(); } catch(e) { errEl.textContent = T('err.generic'); return; }
@@ -497,7 +628,7 @@
         closeM('modal-dev');
         await loadDevices();
       } catch(e) {
-        errEl.textContent = T('err.generic');
+        errEl.textContent = e.message || T('err.generic');
       } finally {
         btn.disabled = false;
       }
@@ -507,9 +638,19 @@
     async function openPicker(side){
       pickSide = side;
       await loadConfig();
+      const dir = syncDir();
+      const expectedType = (side==='src')
+        ? (dir==='push' ? 'local' : 'smb')
+        : (dir==='push' ? 'smb' : 'local');
+      if(side==='src' && dir==='push') document.getElementById('src-device').value = 'local';
+      if(side==='dst' && dir==='pull') document.getElementById('dst-device').value = 'local';
       const devId = document.getElementById(side+'-device').value;
       const dev = devices.find(d=>d.id===devId);
-      if(side==='dst' && dev && dev.type==='smb'){
+      if(!dev || dev.type!==expectedType){
+        alert(expectedType==='smb' ? T('err.remote_must_be_smb') : T('err.local_side_required'));
+        return;
+      }
+      if(dev.type==='smb'){
         const fc = dev.folder_cache||{};
         if(!fc.ready){
           alert(T('err.nas_offline_no_cache'));
@@ -517,7 +658,7 @@
         }
       }
       const cur = side==='dst' ? dstSel : (srcPaths.length ? srcPaths[srcPaths.length-1] : null);
-      pickState = cur
+      pickState = cur && cur.device_id === devId
         ? { device_id: cur.device_id, share: cur.share||'', path: cur.path||'', volume: cur.volume||'' }
         : { device_id: devId, share:'', path:'', volume:'' };
       document.getElementById('pick-multi-hint').style.display = side==='src' ? '' : 'none';
@@ -667,10 +808,12 @@
       document.getElementById('monthlyWeek').value = '1';
       document.getElementById('penabled').checked = true;
       document.getElementById('smbPerformance').checked = false;
+      setSyncDir('push');
       srcPaths = [];
       dstSel = null;
       refreshSrcSelected();
       document.getElementById('dst-label').textContent = T('job.pick_none');
+      refreshDeviceSelects();
       updateScheduleUi();
       updateWolPreview();
     }
@@ -696,18 +839,29 @@
       document.getElementById('smbPerformance').checked = !!p.smb_performance;
       updateScheduleUi();
       const src = Object.assign({}, p.source||{});
+      const dst = Object.assign({}, p.dest||{});
+      const srcDev = devices.find(d=>d.id===(src.device_id||'local'));
+      const dstDev = devices.find(d=>d.id===(dst.device_id||'local'));
+      const isPull = (srcDev && srcDev.type==='smb') || (!srcDev && src.device_id && src.device_id!=='local');
+      setSyncDir(isPull ? 'pull' : 'push');
+      refreshDeviceSelects();
       const paths = Array.isArray(src.paths) && src.paths.length
         ? src.paths.map(x=>String(x||''))
         : [String(src.path||'')];
       srcPaths = paths.map(path=>({
-        device_id: src.device_id||'local',
+        device_id: src.device_id|| (isPull ? '' : 'local'),
         share: src.share||'',
         volume: src.volume||'',
         path: path,
       }));
-      dstSel = Object.assign({}, p.dest||{});
-      document.getElementById('src-device').value = srcPaths[0]?.device_id||'local';
-      document.getElementById('dst-device').value = dstSel.device_id||'';
+      if(isPull){
+        document.getElementById('src-device').value = src.device_id||'';
+        document.getElementById('dst-device').value = 'local';
+      } else {
+        document.getElementById('src-device').value = 'local';
+        document.getElementById('dst-device').value = dst.device_id||'';
+      }
+      dstSel = dst;
       refreshSrcSelected();
       document.getElementById('dst-label').textContent = endpointDisplayLabel(dstSel);
       updateWolPreview();
@@ -716,7 +870,9 @@
 
     function buildSourcePayload(){
       if(!srcPaths.length) return null;
-      const base = {...srcPaths[0], device_id: document.getElementById('src-device').value};
+      const dir = syncDir();
+      const deviceId = dir==='push' ? 'local' : document.getElementById('src-device').value;
+      const base = {...srcPaths[0], device_id: deviceId};
       const paths = srcPaths.map(p=>(p.path||'').trim()).filter((p, i, arr)=> arr.indexOf(p)===i);
       return {
         device_id: base.device_id,
@@ -730,7 +886,20 @@
     async function savePlan(){
       const source = buildSourcePayload();
       if(!source||!dstSel){ alert(T('err.pick_both')); return; }
-      const dest = {...dstSel, device_id: document.getElementById('dst-device').value};
+      const dir = syncDir();
+      const remote = remoteDevice();
+      if(!remote){ alert(T('err.remote_must_be_smb')); return; }
+      if(dir==='push'){
+        source.device_id = 'local';
+        const dest = {...dstSel, device_id: remote.id};
+        return submitPlan(source, dest);
+      }
+      source.device_id = remote.id;
+      const dest = {...dstSel, device_id: 'local'};
+      return submitPlan(source, dest);
+    }
+
+    async function submitPlan(source, dest){
       const runTime = document.getElementById('runAt').value||'12:30';
       const body = {
         name: document.getElementById('pname').value,
@@ -770,9 +939,11 @@
           actions.push('<button class="ok" onclick="runPlan(\''+esc(p.id)+'\')">'+T('plan.run')+'</button>');
         }
         actions.push('<button class="danger" onclick="delPlan(\''+esc(p.id)+'\')" '+(p.running?'disabled':'')+'>'+T('plan.delete')+'</button>');
+        const lastMsg = planLastMessage(p);
+        const msgHtml = lastMsg && !p.running ? '<br><small style="color:var(--muted)">'+esc(lastMsg)+'</small>' : '';
         tr.innerHTML = '<td>'+esc(p.name)+'</td><td><small>'+esc(p.source_label)+' → '+esc(p.dest_label)+
           (p.smb_performance ? '<br><span style="color:var(--accent);font-size:0.78rem">'+esc(T('plan.mode_perf'))+'</span>' : '')+
-          '</small></td><td>'+esc(p.schedule_label||p.run_at)+'</td><td>'+st+'</td><td>'+actions.join(' ')+'</td>';
+          '</small></td><td>'+esc(p.schedule_label||p.run_at)+'</td><td>'+st+msgHtml+'</td><td>'+actions.join(' ')+'</td>';
         tb.appendChild(tr);
       }
     }
@@ -801,7 +972,8 @@
           : (j.status === 'cancelled' ? T('jobs.cancelled') : T('jobs.running')));
         const metaParts = [statusLabel];
         if (j.route_note) metaParts.push(j.route_note);
-        if (j.detail && j.detail !== j.route_note) metaParts.push(j.detail);
+        const detail = jobDetail(j);
+        if (detail && detail !== j.route_note) metaParts.push(detail);
         if (j.speed) metaParts.push(j.speed);
         if (j.eta) metaParts.push('ETA ' + j.eta);
         const meta = metaParts.join(' · ');
@@ -850,19 +1022,58 @@
       loadPlans();
     }
     async function loadLog(){ const j=await (await fetch('/api/log')).json(); document.getElementById('log').textContent=j.text||''; }
+    async function loadNotify(){
+      try {
+        const j = await (await fetch('/api/notifications')).json();
+        const s = (j && j.settings) || {};
+        document.getElementById('notifyFail').checked = s.notify_on_fail !== false;
+        document.getElementById('notifyOk').checked = !!s.notify_on_success;
+        const saved = T('notify.token_saved');
+        const tgChat = document.getElementById('tgChat');
+        tgChat.value = '';
+        tgChat.placeholder = s.telegram_chat_id_set ? saved : 'chat id';
+        document.getElementById('tgToken').value = '';
+        document.getElementById('tgToken').placeholder = s.telegram_token_set ? saved : 'token';
+        const smtpHost = document.getElementById('smtpHost');
+        smtpHost.value = '';
+        smtpHost.placeholder = s.smtp_host_set ? saved : 'host';
+        document.getElementById('smtpPort').value = s.smtp_port || 587;
+        const smtpUser = document.getElementById('smtpUser');
+        smtpUser.value = '';
+        smtpUser.placeholder = s.smtp_user_set ? saved : '';
+        document.getElementById('smtpPass').value = '';
+        document.getElementById('smtpPass').placeholder = s.smtp_password_set ? saved : '';
+        const emailTo = document.getElementById('emailTo');
+        emailTo.value = '';
+        emailTo.placeholder = s.email_to_set ? saved : '';
+      } catch(e) { /* ignore */ }
+    }
     async function saveNotify(){
-      await fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      const body = {
         notify_on_fail: document.getElementById('notifyFail').checked,
         notify_on_success: document.getElementById('notifyOk').checked,
-        telegram_enabled: !!document.getElementById('tgToken').value||!!document.getElementById('tgChat').value,
-        telegram_bot_token: document.getElementById('tgToken').value, telegram_chat_id: document.getElementById('tgChat').value,
-        email_enabled: !!document.getElementById('smtpHost').value, smtp_host: document.getElementById('smtpHost').value,
-        smtp_port: parseInt(document.getElementById('smtpPort').value,10)||587, email_to: document.getElementById('emailTo').value,
-      })});
+      };
+      const chat = document.getElementById('tgChat').value;
+      const tok = document.getElementById('tgToken').value;
+      const smtpHost = document.getElementById('smtpHost').value;
+      const smtpUser = document.getElementById('smtpUser').value;
+      const emailTo = document.getElementById('emailTo').value;
+      if (tok || chat) body.telegram_enabled = true;
+      if (smtpHost || emailTo) body.email_enabled = true;
+      body.smtp_port = parseInt(document.getElementById('smtpPort').value,10)||587;
+      await encryptField(body, 'telegram_chat_id', chat);
+      await encryptField(body, 'smtp_host', smtpHost);
+      await encryptField(body, 'smtp_user', smtpUser);
+      await encryptField(body, 'email_to', emailTo);
+      const smtpPw = document.getElementById('smtpPass').value;
+      if (tok) body.telegram_bot_token_enc = await encryptSecret(tok);
+      if (smtpPw) body.smtp_password_enc = await encryptSecret(smtpPw);
+      await fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      await loadNotify();
     }
     async function testNotify(){ await fetch('/api/notifications/test',{method:'POST'}); loadLog(); }
 
-    (async()=>{ try { localStorage.setItem(LANG_COOKIE, LANG); } catch(e){} updateScheduleUi(); await loadConfig(); await loadDevices(); loadPlans(); loadActiveJobs(); loadLog(); setInterval(loadPlans,5000); setInterval(loadActiveJobs,1500); setInterval(async()=>{
+    (async()=>{ try { localStorage.setItem(LANG_COOKIE, LANG); } catch(e){} updateScheduleUi(); await loadConfig(); await loadDevices(); await loadNotify(); loadPlans(); loadActiveJobs(); loadLog(); setInterval(loadPlans,5000); setInterval(loadActiveJobs,1500); setInterval(async()=>{
       if(devices.some(d=>d.type==='smb' && (d.folder_cache||{}).building)) await loadDevices();
     }, 3000); })();
   </script>

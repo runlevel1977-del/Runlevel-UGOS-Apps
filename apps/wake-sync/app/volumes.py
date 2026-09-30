@@ -12,10 +12,17 @@ from usb_storage import discover_usb_mounts
 _UGOS = Path(os.environ.get("NAS_UGOS_MOUNT", "/mnt/ugos"))
 _VOL1 = Path(os.environ.get("NAS_VOL1_MOUNT", "/mnt/vol1"))
 _VOL2 = Path(os.environ.get("NAS_VOL2_MOUNT", "/mnt/vol2"))
+_HOME = Path(os.environ.get("NAS_HOME_MOUNT", "/mnt/home"))
 _USB_ROOT = Path(os.environ.get("NAS_USB_MOUNT", "/mnt/@usb"))
 
-_VOLUME_KEYS = {"1": "volume.1", "2": "volume.2", "ugos": "volume.ugos"}
+_VOLUME_KEYS = {
+    "1": "volume.1",
+    "2": "volume.2",
+    "ugos": "volume.ugos",
+    "home": "volume.home",
+}
 _USB_PREFIX = "usb-"
+_KNOWN_POOL_IDS = frozenset({"1", "2", "ugos", "home"})
 
 
 def _configured_volumes() -> list[tuple[str, Path, str]]:
@@ -27,6 +34,7 @@ def _configured_volumes() -> list[tuple[str, Path, str]]:
             _UGOS,
             os.environ.get("NAS_DATA_ROOT_HOST", "UGOS selection"),
         ),
+        ("home", _HOME, "/home"),
     ]
 
 
@@ -153,7 +161,7 @@ def resolve_local_path(volume_id: str, subpath: str) -> Path:
 
 def normalize_volume_id(volume_id: str | None) -> str:
     v = (volume_id or "").strip()
-    if v in ("1", "2", "ugos"):
+    if v in _KNOWN_POOL_IDS:
         return v
     if v.startswith(_USB_PREFIX):
         for vid, mount, _, _ in _configured_usb_volumes():
@@ -161,4 +169,3 @@ def normalize_volume_id(volume_id: str | None) -> str:
                 return v
         return v
     return "1"
-

@@ -43,7 +43,22 @@ body {
 }
 .nav-foot a { color: #5c6573; text-decoration: none; font-weight: 650; }
 .nav-foot a:hover { color: var(--accent); }
-.lang-switch { display: flex; gap: 4px; }
+.lang-switch { display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: 100%; }
+.lang-label { font-size: 0.75rem; color: #5c6573; font-weight: 650; }
+#lang-select {
+  appearance: auto;
+  -webkit-appearance: menulist;
+  min-width: 5.5rem;
+  width: 100%;
+  max-width: 9rem;
+  border: 1px solid #d7dde6;
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font: 700 12px/1.2 "Segoe UI", system-ui, sans-serif;
+  cursor: pointer;
+  color: #1f2937;
+}
 .lang-btn {
   appearance: none;
   border: 1px solid #d7dde6;
