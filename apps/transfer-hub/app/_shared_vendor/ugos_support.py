@@ -28,8 +28,18 @@ def _env_bool(name: str, default: bool = True) -> bool:
     return raw in ("1", "true", "yes", "on")
 
 
+def _looks_like_ipv4(token: str) -> bool:
+    parts = token.split(".")
+    if len(parts) != 4:
+        return False
+    try:
+        return all(0 <= int(part) <= 255 for part in parts)
+    except ValueError:
+        return False
+
+
 def _detect_lan_host() -> str:
-    """Best-effort NAS IP when container uses bridge network."""
+    """Best-effort NAS host IP from inside a Docker bridge container."""
     try:
         proc = subprocess.run(
             ["ip", "-4", "route", "get", "1.1.1.1"],
@@ -37,9 +47,25 @@ def _detect_lan_host() -> str:
             text=True,
             timeout=3,
         )
-        for tok in (proc.stdout or "").split():
-            if tok.count(".") == 3 and tok[0].isdigit():
-                return tok
+        parts = (proc.stdout or "").split()
+        if "via" in parts:
+            idx = parts.index("via") + 1
+            if idx < len(parts) and _looks_like_ipv4(parts[idx]):
+                return parts[idx]
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    try:
+        proc = subprocess.run(
+            ["ip", "-4", "route", "show", "default"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        parts = (proc.stdout or "").split()
+        if "via" in parts:
+            idx = parts.index("via") + 1
+            if idx < len(parts) and _looks_like_ipv4(parts[idx]):
+                return parts[idx]
     except (OSError, subprocess.TimeoutExpired):
         pass
     return ""
@@ -64,7 +90,14 @@ def normalize_ugos_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     port = max(1, min(65535, port))
     user = str(data.get("username") or os.environ.get("UGOS_API_USER") or "").strip()
     pw = str(data.get("password") or os.environ.get("UGOS_API_PASSWORD") or "")
-    host = str(data.get("host") or default_ugos_host()).strip() or default_ugos_host()
+    host = str(data.get("host") or "").strip()
+    # Inside Docker bridge, 127.0.0.1 is the container — rewrite to NAS host.
+    if not host or host in ("127.0.0.1", "localhost"):
+        if not _env_bool("UGOS_API_USE_LOCALHOST", default=False):
+            host = default_ugos_host()
+        else:
+            host = host or "127.0.0.1"
+    host = host or default_ugos_host()
     enabled = data.get("enabled")
     if enabled is None:
         enabled = _env_bool("UGOS_API_ENABLED", default=True)

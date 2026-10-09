@@ -1,115 +1,46 @@
 > Public privacy policy for UGREEN App Center.
 > Repository: https://github.com/runlevel1977-del/Runlevel-UGOS-Apps
 
-# Transfer Hub — Privacy Policy
+# Transfer Hub — Privacy & Security Summary
 
 **App ID:** `com.runlevel.transferhub`  
-**Publisher / data controller:** Ivica Kampic, acting as Runlevel  
-**E-mail:** runlevel1977@posteo.de  
-**Registered / office address:** Ivica Kampic, Runlevel, Leipziger Str. 33, 89537 Giengen, Deutschland  
-**Effective date:** 4 September 2026  
-**Last updated:** 4 September 2026
+**Publisher:** Runlevel  
+**Version:** 0.6.10  
 
-This policy describes personal data processed by Transfer Hub when installed on a UGREEN NAS. The app runs locally on the device. Runlevel does not operate a cloud backend for this app and does not receive your files.
+## Data stored locally (on the NAS)
 
-## 1. Identity of the controller
+Under the user-chosen **Data directory** (`DATA_PATH`, mounted as `/data` in the container):
 
-- **Controller (software publisher):** Ivica Kampic / Runlevel  
-- **E-mail:** runlevel1977@posteo.de  
-- **Registered / office address (postal):**  
-  Ivica Kampic  
-  Runlevel  
-  Leipziger Str. 33  
-  89537 Giengen  
-  Deutschland  
+| File | Content |
+|------|---------|
+| `profiles.json` | Transfer profiles (source/destination paths, schedule, options) |
+| `devices.json` | Saved devices including **SMB username and password** |
+| `hub.log` | Application log (transfer start/end, errors) |
 
-  To exercise your rights, write to **runlevel1977@posteo.de** or to the postal address above.
+No other persistent user data is collected by Transfer Hub.
 
-- **You (the NAS administrator)** decide whether to install the app, which folder to mount, and when to uninstall (uninstall removes the app data directory under the package).
+## Network behavior
 
-## 2. Legal basis
+- Connections are **local/LAN only**: SMB to PCs or other NAS devices, local filesystem paths (Volume 1/2, UGOS folder, USB under `/mnt/@usb`).
+- Transfer Hub does **not** send data to external servers, analytics, or cloud services operated by Runlevel.
+- Optional link in the UI points to **Ugreen NAS Admin** on GitHub (Windows companion tool); opening that link is user-initiated in the browser.
 
-- **EU / GDPR:** processing is necessary to provide the app you requested (Art. 6(1)(b) GDPR — contract) and to protect the NAS (Art. 6(1)(f) — legitimate interest in operating your own device). Optional SMB credentials are stored only after you tap **I agree**. You may tap **Decline** with equal ease; then credential storage stays disabled. You may withdraw consent at any time.
-- We do **not sell or share** personal data with third parties.
-- There is **no cross-border transfer** by Runlevel. Data stays on your NAS unless you copy files to an SMB host you chose.
-- **Sensitive data:** we do not request special-category data. Do not store health, biometric, or similar data in this app.
+## Access control
 
-## 3. Personal information we process (purpose, method, scope)
+- App is **admin-only** (`only_admin: true` in `project.yaml`).
+- SMB credentials are stored in plain JSON on the NAS data path — users should use a dedicated data folder with restricted permissions and strong SMB passwords.
 
-| Business function | Data | Purpose | Method | Scope / retention |
-|---|---|---|---|---|
-| Install | UGOS folder shortcut (the only NAS folder mounted); optional LAN scan CIDR / extra host IPs | Run copy/sync; find SMB devices on your LAN | UGOS install parameters (no passwords) | Until uninstall |
-| LAN scan | NAS LAN IP and probed host IPs in the CIDR you configured | List nearby SMB devices | Local scan from the app container; results stay on the NAS | Until uninstall / you change scan settings |
-| SMB devices | Display name, host IP, SMB username/password | Copy/sync over SMB | Stored **encrypted at rest**; passwords are **RSA-encrypted in transit** on HTTP and are never shown again in the UI | Until you delete the device or uninstall |
-| Profiles / schedules | Source/destination paths, options | Run copy/sync | Local JSON in the package data dir | Until you delete the profile or uninstall |
-| Consent | Agree/decline, timestamp, policy version | Record your choice | `privacy_consent.json` | Until uninstall |
-| App login | App password (you choose) | Block unauthorized access | Salted hash; password is **RSA-encrypted in transit** (not HTTP plaintext) | Until uninstall |
-| Logs | Job status (passwords redacted) | Troubleshooting | App log | Until uninstall |
+## Recommendations for users
 
-Installation parameters do not include NAS username, SMB password, or UGOS API password. The container mounts **only** the UGOS folder you pick at install (plus USB if a stick is present). It does **not** mount the entire `/home`, `/volume1`, or `/volume2` trees.
+- Choose a dedicated `DATA_PATH` (e.g. `/volume1/docker/transfer-hub/data`), not a public share.
+- Do not expose port 29100 to the internet without additional protection.
+- Use separate SMB accounts with minimal required permissions where possible.
 
-## 4. Children / minors
+## Data retention
 
-This app is intended for NAS administrators. It is not directed at children. We do not knowingly collect personal data from children. Do not let minors use administrator credentials. If you believe a child has provided data, uninstall the app and contact us.
-
-## 5. Your rights and how to exercise them
-
-These methods are genuine and effective: the files live on your NAS in the app package data directory, and you can e-mail the controller.
-
-According to the General Data Protection Regulation (GDPR), you have the following rights:
-
-- Accessing, correcting, or deleting your data
-- Restricting or opposing data processing
-- Receive your data in a portable format
-- Withdraw consent at any time
-- Complain to data protection regulatory agencies
-
-If you are a resident of California, according to the California Consumer Privacy Act (CCPA), you also have the following rights:
-
-- Understand what personal information we have collected
-- Delete your personal information
-- Choose not to sell or share your information (we do not sell or share)
-- Correct inaccurate information
-- Exercise rights without discrimination
-
-If you need to exercise any of the above rights, please contact:  
-runlevel1977@posteo.de  
-Ivica Kampic, Runlevel, Leipziger Str. 33, 89537 Giengen, Deutschland
-
-Practical local steps on the NAS:
-
-- **Access / portability:** copy the package data folder (JSON settings, consent file). Passwords are stored hashed or encrypted; we cannot recover the plaintext app password.
-- **Correction:** change values in the app UI, or delete devices/profiles.
-- **Deletion:** uninstall the app (this removes the package data directory), or delete individual devices/profiles in the UI.
-- **Withdraw consent:** tap **Decline** on the privacy dialog, or delete `privacy_consent.json`.
-- **Restrict / object:** Decline consent; remove SMB devices; or uninstall.
-
-## 6. Storage period
-
-Local files remain until you delete them or **uninstall** the app. Uninstall removes the package directory, including app password, profiles, and encrypted credentials. There is no Runlevel cloud retention.
-
-## 7. Security
-
-- Launch method: **standalone authentication** (`open_type: tab`). On first open a privacy consent dialog (Agree and Decline) is shown. Then you set an app password.
-- After login the app issues a **unique 32-character session ID** stored server-side. Request headers such as `user_id` / `user_type` / `Ugreen-User-ID` are **not** accepted as authentication.
-- Unauthenticated access shows Sign in / returns 401 (including profile run). Do not expose port 29100 to the public Internet.
-- Admin-only (`only_admin: true`).
-- Passwords on the LAN HTTP path are protected with **RSA-OAEP (SHA-256)** (UGREEN-accepted alternative where the app listens on HTTP inside the NAS). SMB secrets at rest are encrypted. Adding a device is **rate-limited**. Logs redact secrets.
-- Host / share / path values passed to SMB tools are validated separately; the app does not interpolate them into a shell command string.
-
-## 8. Host access
-
-- Bridge networking (not Docker host networking); no privileged mode.
-- Only the user-selected UGOS folder (`NAS_DATA_ROOT`), optional USB, and the package data directory.
-- **`docker.sock` is not mounted.** Entire `/home`, `/volume1`, and `/volume2` are **not** mounted.
+- Data remains until the user deletes profiles/devices or removes the app data folder.
+- Uninstalling the Docker app typically leaves `DATA_PATH` intact on the NAS (user data preserved).
 
 ## Contact
 
-Ivica Kampic / Runlevel  
-E-mail: runlevel1977@posteo.de  
-Registered / office address:  
-Ivica Kampic  
-Runlevel  
-Leipziger Str. 33  
-89537 Giengen  
-Deutschland
+Developer contact for privacy inquiries: runlevel1977@posteo.de (Ivica Kampic, Runlevel)

@@ -9,31 +9,39 @@
 
 <div id="rl-privacy-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;align-items:center;justify-content:center;padding:1rem;">
   <div style="max-width:520px;background:#1a2332;color:#e8eef4;border-radius:10px;padding:1.25rem;border:1px solid #334;">
-    <h3 style="margin:0 0 .75rem;font-size:1rem;">Privacy notice</h3>
+    <h3 style="margin:0 0 .75rem;font-size:1rem;">Privacy notice / 隐私声明</h3>
     <p style="margin:0 0 1rem;font-size:.88rem;line-height:1.45;color:#8fa3b8;">
-      This app may store credentials or notification settings locally on your NAS.
       Please read the <a id="rl-privacy-link" href="{{ compliance_links.privacy }}" target="_blank" rel="noopener" style="color:#3b82f6;">privacy policy</a>
-      before saving sensitive data.
+      before continuing. You may agree or decline; declining is as easy as agreeing.
+      If you decline, credential storage and optional notification settings stay disabled.
     </p>
-    <button type="button" id="rl-privacy-accept" style="background:#2d9f6f;color:#fff;border:none;padding:.45rem .9rem;border-radius:6px;cursor:pointer;">I agree</button>
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem;">
+      <button type="button" id="rl-privacy-accept" style="background:#2d9f6f;color:#fff;border:none;padding:.45rem .9rem;border-radius:6px;cursor:pointer;">I agree / 同意</button>
+      <button type="button" id="rl-privacy-decline" style="background:#445;color:#fff;border:none;padding:.45rem .9rem;border-radius:6px;cursor:pointer;">Decline / 拒绝</button>
+    </div>
   </div>
 </div>
+<script src="/static/rsa_http.js"></script>
 <script>
 (function () {
   const needs = {{ 'true' if privacy_consent_required else 'false' }};
-  const given = {{ 'true' if privacy_consent_given else 'false' }};
+  const decided = {{ 'true' if privacy_decision_made else 'false' }};
   const modal = document.getElementById('rl-privacy-modal');
-  if (needs && !given && modal) {
-    modal.style.display = 'flex';
-    document.getElementById('rl-privacy-accept')?.addEventListener('click', async function () {
-      try {
-        const r = await fetch('/api/privacy/consent', { method: 'POST' });
-        if (r.ok) modal.style.display = 'none';
-      } catch (e) { /* ignore */ }
+  async function sendConsent(accepted) {
+    const r = await fetch('/api/privacy/consent', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({accepted: !!accepted, declined: !accepted})
     });
+    if (r.ok && modal) modal.style.display = 'none';
+  }
+  if (needs && !decided && modal) {
+    modal.style.display = 'flex';
+    document.getElementById('rl-privacy-accept')?.addEventListener('click', function () { sendConsent(true); });
+    document.getElementById('rl-privacy-decline')?.addEventListener('click', function () { sendConsent(false); });
   }
   window.rlPrivacyOk = function () {
-    return !needs || given || (modal && modal.style.display === 'none');
+    return !needs || {{ 'true' if privacy_consent_given else 'false' }};
   };
 })();
 </script>

@@ -21,6 +21,76 @@ _USB_PREFIX = "usb-"
 _KNOWN_POOL_IDS = frozenset({"ugos"})
 
 
+class OutsideVolumeError(ValueError):
+    """Raised when a local path leaves the selected volume mount."""
+
+
+def safe_relative(subpath: str) -> str:
+    """Return a relative path with no parent or absolute segments.
+
+    Args:
+        subpath: User-supplied folder path inside a volume.
+
+    Returns:
+        Normalized relative path. Empty means the volume root.
+
+    Raises:
+        OutsideVolumeError: The path is absolute, contains ``..``, or a NUL.
+    """
+    raw = (subpath or "").replace("\\", "/").strip()
+    if "\x00" in raw:
+        raise OutsideVolumeError("path outside volume")
+    raw = raw.strip("/")
+    parts = [part for part in raw.split("/") if part not in ("", ".")]
+    if any(part == ".." for part in parts):
+        raise OutsideVolumeError("path outside volume")
+    return "/".join(parts)
+
+
+def _is_within(child: Path, root: Path) -> bool:
+    try:
+        child.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def contained_join(root: Path, subpath: str) -> Path:
+    """Join ``subpath`` under ``root`` and reject escapes after ``resolve()``.
+
+    Args:
+        root: Volume mount inside the container.
+        subpath: Relative folder under that mount.
+
+    Returns:
+        Resolved path that stays inside ``root``.
+
+    Raises:
+        OutsideVolumeError: The path leaves the mount or uses a symlink.
+    """
+    rel = safe_relative(subpath)
+    try:
+        root_real = root.resolve()
+    except OSError as exc:
+        raise OutsideVolumeError("path outside volume") from exc
+    candidate = root_real.joinpath(*rel.split("/")) if rel else root_real
+    try:
+        resolved = candidate.resolve()
+    except OSError as exc:
+        raise OutsideVolumeError("path outside volume") from exc
+    if not _is_within(resolved, root_real):
+        raise OutsideVolumeError("path outside volume")
+    cursor = root_real
+    if rel:
+        for part in rel.split("/"):
+            cursor = cursor / part
+            if cursor.is_symlink():
+                raise OutsideVolumeError("path outside volume")
+            if not cursor.exists():
+                break
+    return resolved
+
+
 def _configured_volumes() -> list[tuple[str, Path, str]]:
     """(id, container_path, host_hint)."""
     return [
@@ -141,22 +211,21 @@ def resolve_local_path(volume_id: str, subpath: str) -> Path:
     from i18n import get_lang, t
 
     vid = (volume_id or "ugos").strip() or "ugos"
-    rel = (subpath or "").strip().strip("/")
+    rel = safe_relative(subpath)
 
     if vid.startswith(_USB_PREFIX):
         for v, mount, _, _ in _configured_usb_volumes():
             if v == vid and mount.is_dir():
-                return mount / rel if rel else mount
+                return contained_join(mount, rel)
         raise ValueError(t("err.usb_not_mounted", get_lang(), id=vid))
 
     for v, mount, _ in _configured_volumes():
         if v == vid and mount.is_dir():
-            return mount / rel if rel else mount
+            return contained_join(mount, rel)
 
     mounts = list_volumes()
     if mounts:
-        m = Path(mounts[0]["mount"])
-        return m / rel if rel else m
+        return contained_join(Path(mounts[0]["mount"]), rel)
     raise ValueError(t("err.no_storage", get_lang()))
 
 

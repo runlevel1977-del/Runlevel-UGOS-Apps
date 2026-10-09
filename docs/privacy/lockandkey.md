@@ -1,112 +1,62 @@
 > Public privacy policy for UGREEN App Center.
 > Repository: https://github.com/runlevel1977-del/Runlevel-UGOS-Apps
 
-# Lock & Key — Privacy Policy
+# Lock & Key — Privacy & Security Summary
 
 **App ID:** `com.runlevel.lockandkey`  
-**Publisher / data controller:** Ivica Kampic, acting as Runlevel  
-**E-mail:** runlevel1977@posteo.de  
-**Registered / office address:** Ivica Kampic, Runlevel, Leipziger Str. 33, 89537 Giengen, Deutschland  
-**Effective date:** 4 September 2026  
-**Last updated:** 4 September 2026
+**Publisher:** Runlevel  
+**Version:** 0.1.21  
 
-This policy describes personal data processed by Lock & Key when installed on a UGREEN NAS. The app runs locally on the device. Runlevel does not operate a cloud backend for this app and does not receive your keys or vault contents.
+## Data stored locally (on the NAS)
 
-## 1. Identity of the controller
+Under the user-chosen **Data directory** (`DATA_PATH`, mounted as `/data` in the container):
 
-- **Controller (software publisher):** Ivica Kampic / Runlevel  
-- **E-mail:** runlevel1977@posteo.de  
-- **Registered / office address (postal):**  
-  Ivica Kampic  
-  Runlevel  
-  Leipziger Str. 33  
-  89537 Giengen  
-  Deutschland  
+| File | Content |
+|------|---------|
+| `vaults.json` | Vault registry (folder paths, seal status, USB binding hashes, file counts) |
+| `jobs.json` | Background job state (seal/unlock progress) |
+| `lockkey.log` | Application log |
+| `meta.json` | Deleted-vault blocklist and app metadata |
 
-  To exercise your rights, write to **runlevel1977@posteo.de** or to the postal address above.
+**Encryption keys are not stored on the NAS.** After sealing, the user downloads the key file (`lockkey_<id>.lk`) or writes it to a USB stick. Without the key file (and optional password), encrypted data cannot be recovered.
 
-- **You (the NAS administrator)** decide whether to install the app, which folders to seal, and when to uninstall.
+## User data on shared volumes
 
-## 2. Legal basis
+The app encrypts files in user-selected folders on **Volume 1** and **Volume 2** (and optional UGOS folder shortcut):
 
-- **EU / GDPR:** processing is necessary to provide the app you requested (Art. 6(1)(b) GDPR — contract) and to protect the NAS (Art. 6(1)(f) — legitimate interest in operating your own device). Optional key-file passwords are used only after you tap **I agree**. You may tap **Decline** with equal ease. You may withdraw consent at any time.
-- We do **not sell or share** personal data with third parties.
-- There is **no cross-border transfer** by Runlevel. Data stays on your NAS (and on USB if you copy a key file yourself).
-- **Sensitive data:** we do not request special-category data. Do not store health, biometric, or similar data in this app.
+- Encrypted files use suffix `.lkenc`
+- Marker `.lockkey-sealed` and manifest `.lockkey-manifest` in the vault folder
+- Original plaintext files are removed after a successful seal
 
-## 3. Personal information we process (purpose, method, scope)
+## Network behavior
 
-| Business function | Data | Purpose | Method | Scope / retention |
-|---|---|---|---|---|
-| Install | Data directory; UGOS folder shortcut | Run the app | UGOS install parameters (no passwords) | Until uninstall |
-| Vault registry | Vault names, paths, status | Manage sealed folders | Local JSON in the data directory | Until you delete the vault or uninstall |
-| Key material | Encryption key file; optional key-file password | Seal / unlock folders | Key is **not** kept on the NAS after you download it or write it to USB. Passwords and key files on the HTTP path are **RSA-encrypted in transit** | Until you delete the key / uninstall |
-| Consent | Agree/decline, timestamp, policy version | Record your choice | `privacy_consent.json` | Until uninstall |
-| App login | App password (you choose) | Block unauthorized access | Salted hash; password is **RSA-encrypted in transit** (not HTTP plaintext) | Until uninstall |
-| Logs | Job status (secrets redacted) | Troubleshooting | App log | Until uninstall |
+- **No outbound connections** to Runlevel or third-party analytics.
+- Web UI is served on port **29135** (admin access only via UGOS).
+- Optional link in the UI points to **Ugreen NAS Admin** on GitHub (user-initiated).
 
-Installation parameters do not include NAS username or NAS password. Losing the key file means sealed content cannot be recovered.
+## Host access
 
-## 4. Children / minors
+| Mount | Access | Purpose |
+|-------|--------|---------|
+| `/volume1`, `/volume2` | read/write | User folders to seal/unlock |
+| `${NAS_DATA_ROOT}` → `/mnt/ugos` | read/write | Folder picker shortcut |
+| `/mnt/@usb` | read/write | USB key file read/write; stick may be formatted before key write |
+| `/dev`, `/sys` | read-only | USB device identification |
+| `/var/packages/com.runlevel.lockandkey` | read-only | Package metadata |
 
-This app is intended for NAS administrators. It is not directed at children. We do not knowingly collect personal data from children. Do not let minors use administrator credentials. If you believe a child has provided data, uninstall the app and contact us.
+The app can **format or wipe USB sticks** when writing a key file (FAT32, single key per stick). This affects only removable USB media selected by the administrator.
 
-## 5. Your rights and how to exercise them
+## Access control
 
-These methods are genuine and effective: the files live on your NAS in the app data directory, and you can e-mail the controller.
+- App is **admin-only** (`only_admin: true`).
+- Flask UI has no separate login — protection relies on UGOS admin session and network access to port 29135.
+- Do not expose port 29135 to the internet without additional protection.
 
-According to the General Data Protection Regulation (GDPR), you have the following rights:
+## Data retention
 
-- Accessing, correcting, or deleting your data
-- Restricting or opposing data processing
-- Receive your data in a portable format
-- Withdraw consent at any time
-- Complain to data protection regulatory agencies
-
-If you are a resident of California, according to the California Consumer Privacy Act (CCPA), you also have the following rights:
-
-- Understand what personal information we have collected
-- Delete your personal information
-- Choose not to sell or share your information (we do not sell or share)
-- Correct inaccurate information
-- Exercise rights without discrimination
-
-If you need to exercise any of the above rights, please contact:  
-runlevel1977@posteo.de  
-Ivica Kampic, Runlevel, Leipziger Str. 33, 89537 Giengen, Deutschland
-
-Practical local steps on the NAS:
-
-- **Access / portability:** copy the data directory (JSON settings, consent file). The app password is hashed; we cannot recover the plaintext. Vault encryption keys are in the `.lk` file you downloaded — not in the data directory after download.
-- **Correction:** change values in the app UI, or delete vault records.
-- **Deletion:** uninstall the app or delete individual vaults in the UI. Delete key files you stored yourself (download / USB).
-- **Withdraw consent:** tap **Decline** on the privacy dialog, or delete `privacy_consent.json`.
-- **Restrict / object:** Decline consent or uninstall.
-
-## 6. Storage period
-
-Local files remain until you delete them or **uninstall** the app. There is no Runlevel cloud retention.
-
-## 7. Security
-
-- Launch method: **standalone authentication** (`open_type: tab`). On first open a privacy consent dialog (Agree and Decline) is shown. Then you set an app password.
-- After login the app issues a **unique 32-character session ID** stored server-side. Request headers such as `user_id` / `user_type` / `Ugreen-User-ID` are **not** accepted as authentication.
-- Unauthenticated access shows Sign in / returns 401. Do not expose port 29135 to the public Internet.
-- Admin-only (`only_admin: true`).
-- Passwords and key files on the LAN HTTP path are protected with **RSA-OAEP (SHA-256)** (UGREEN-accepted alternative where the app listens on HTTP inside the NAS).
-
-## 8. Host access
-
-- Bridge networking (not Docker host networking); no privileged mode.
-- User-selected UGOS folder, USB mount for key files, plus the data directory. `/dev` is not mounted. **`docker.sock` is not mounted.**
+- Registry and logs remain under `DATA_PATH` until the user deletes that folder.
+- Uninstalling the app typically leaves `DATA_PATH` and encrypted `.lkenc` files on the NAS intact.
 
 ## Contact
 
-Ivica Kampic / Runlevel  
-E-mail: runlevel1977@posteo.de  
-Registered / office address:  
-Ivica Kampic  
-Runlevel  
-Leipziger Str. 33  
-89537 Giengen  
-Deutschland
+Developer contact for privacy inquiries: runlevel1977@posteo.de (Ivica Kampic, Runlevel)

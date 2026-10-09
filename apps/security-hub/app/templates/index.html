@@ -142,25 +142,34 @@ function outcomeLabel(o) {
   return o || '-';
 }
 
-function outcomeClass(o) {
-  const x = (o || '').toLowerCase();
-  if (x === 'ok') return 'outcome-ok';
-  if (x === 'failed') return 'outcome-failed';
-  return 'outcome-session';
-}
-
 function renderEvents(data) {
   const body = document.getElementById('eventsBody');
   const events = data.events || [];
-  body.innerHTML = events.map(ev => `<tr>
-      <td>${ev.timestamp || '-'}</td>
-      <td>${ev.ip || '-'}</td>
-      <td>${ev.source || '-'}</td>
-      <td class="${outcomeClass(ev.outcome)}">${outcomeLabel(ev.outcome)}</td>
-      <td>${ev.user || '-'}</td>
-      <td class="access-cell">${(ev.access || '—').replace(/</g,'&lt;')}</td>
-      <td>${(ev.detail || '').replace(/</g,'&lt;')}</td>
-    </tr>`).join('');
+  const outcomeClasses = {ok: 'outcome-ok', failed: 'outcome-failed', session: 'outcome-session'};
+  body.replaceChildren();
+  for (const ev of events) {
+    const row = document.createElement('tr');
+    const cells = [
+      ev.timestamp || '-',
+      ev.ip || '-',
+      ev.source || '-',
+      outcomeLabel(ev.outcome),
+      ev.user || '-',
+      ev.access || '—',
+      ev.detail || '',
+    ];
+    cells.forEach(function (text, index) {
+      const cell = document.createElement('td');
+      if (index === 3) {
+        const kind = String(ev.outcome || '').toLowerCase();
+        if (outcomeClasses[kind]) cell.className = outcomeClasses[kind];
+      }
+      if (index === 5) cell.className = 'access-cell';
+      cell.textContent = text == null ? '' : String(text);
+      row.appendChild(cell);
+    });
+    body.appendChild(row);
+  }
   document.getElementById('emptyHint').style.display = events.length ? 'none' : 'block';
   let status = '';
   if (data.busy) status = tr('status.busy');

@@ -20,7 +20,7 @@ from store import DATA_DIR, append_log, read_log_tail
 
 app = Flask(__name__)
 init_ugos_auth(app)
-APP_VERSION = os.environ.get("SECURITY_HUB_VERSION", "0.1.20")
+APP_VERSION = os.environ.get("SECURITY_HUB_VERSION", "0.1.21")
 NAS_ADMIN_URL = os.environ.get(
     "NAS_ADMIN_URL",
     "https://github.com/runlevel1977-del/UgreenNASAdmin/releases/latest",

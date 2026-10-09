@@ -45,7 +45,7 @@ from store import (
 app = Flask(__name__)
 init_ugos_auth(app)
 NAS_MOUNT = os.environ.get("NAS_MOUNT", "/mnt/nas")
-APP_VERSION = os.environ.get("TRANSFER_HUB_VERSION", "0.6.35")
+APP_VERSION = os.environ.get("TRANSFER_HUB_VERSION", "0.6.36")
 NAS_ADMIN_URL = os.environ.get(
     "NAS_ADMIN_URL",
     "https://github.com/runlevel1977-del/UgreenNASAdmin/releases/latest",
@@ -128,6 +128,36 @@ def _validate_source_endpoint(source: dict, lng: str) -> str | None:
     return None
 
 
+def _local_path_outside(ep: dict, lng: str) -> str | None:
+    """Reject local profile paths that leave the selected volume mount.
+
+    Args:
+        ep: Source or destination endpoint from the profile body.
+        lng: Active UI language.
+
+    Returns:
+        An error string when the path escapes, otherwise None.
+    """
+    from volumes import OutsideVolumeError, resolve_local_path, safe_relative
+
+    dev = get_device(ep.get("device_id", LOCAL_ID))
+    if not dev or dev.get("type") != "local":
+        return None
+    try:
+        for path in endpoint_path_list(ep):
+            safe_relative(path)
+            try:
+                resolve_local_path(ep.get("volume") or "", path)
+            except OutsideVolumeError:
+                raise
+            except ValueError:
+                # Mount is absent here; parent segments were already rejected.
+                pass
+    except OutsideVolumeError:
+        return t("err.path_outside", lng)
+    return None
+
+
 def _parse_profile_body(
     body: dict,
     profiles: list,
@@ -158,6 +188,10 @@ def _parse_profile_body(
     src_err = _validate_source_endpoint(source, lng)
     if src_err:
         return None, (src_err, 400)
+    for ep in (source, dest):
+        outside = _local_path_outside(ep, lng)
+        if outside:
+            return None, (outside, 400)
 
     sk = (
         f"{source.get('device_id')}|{source.get('volume') or ''}|"

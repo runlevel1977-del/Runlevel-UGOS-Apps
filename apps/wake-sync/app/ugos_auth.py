@@ -31,6 +31,7 @@ from flask import (
 from transport_rsa import decrypt_oaep, public_pem
 
 _DEV_BYPASS = os.environ.get("UGOS_AUTH_DEV_BYPASS", "0").strip() == "1"
+_REQUIRE_INSTALLER_BIND = os.environ.get("UGOS_REQUIRE_INSTALLER_BIND", "0").strip() == "1"
 _HEALTH_PATHS = frozenset({"/health", "/healthz"})
 _PUBLIC_PATHS = frozenset({
     "/login",
@@ -72,7 +73,11 @@ _LOGIN_HTML = """<!DOCTYPE html>
   <form class="box" id="login-form" style="display: {{ 'none' if needs_consent else 'block' }};">
     <h1>{{ title }}</h1>
     <p>{{ hint }}</p>
-    {% if setup %}
+    {% if setup and bind_installer %}
+    <label>NAS administrator</label>
+    <input id="ugos-user" required autocomplete="username"/>
+    <label>NAS administrator password</label>
+    <input type="password" id="ugos-pw" required autocomplete="current-password"/>
     <label>New password</label>
     <input type="password" id="pw" required minlength="8" autocomplete="new-password"/>
     <label>Confirm password</label>
@@ -102,6 +107,7 @@ _LOGIN_HTML = """<!DOCTYPE html>
   <script>
   (function () {
     const setup = {{ 'true' if setup else 'false' }};
+    const bindInstaller = {{ 'true' if bind_installer else 'false' }};
     const overlay = document.getElementById('consent');
 
     async function encryptSecret(plain) {
@@ -137,6 +143,10 @@ _LOGIN_HTML = """<!DOCTYPE html>
         const body = {password_enc: await encryptSecret(pw)};
         if (setup) {
           const pw2 = document.getElementById('pw2').value;
+          if (bindInstaller) {
+            body.ugos_username = document.getElementById('ugos-user').value;
+            body.ugos_password_enc = await encryptSecret(document.getElementById('ugos-pw').value);
+          }
           body.password2_enc = await encryptSecret(pw2);
         }
         const r = await fetch('/api/login', {
@@ -361,6 +371,138 @@ def _needs_consent() -> bool:
         return True
 
 
+_ADMIN_ROLES = frozenset({"admin", "administrator"})
+_SETUP_ERRORS = frozenset({
+    "NAS administrator sign-in required",
+    "Plaintext passwords are not accepted",
+    "NAS administrator sign-in failed",
+    "Only a NAS administrator can set the initial password",
+})
+
+
+def _current_user_is_admin(payload: object, username: str) -> bool:
+    """Return whether a UGOS login payload is the named administrator.
+
+    Args:
+        payload: JSON object from UGOS login or ``/ugreen/v1/user/current``.
+        username: Account that just authenticated.
+
+    Returns:
+        True when that account's role is an administrator.
+    """
+    if not isinstance(payload, dict):
+        return False
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+    if not isinstance(data, dict):
+        return False
+    name = str(data.get("username") or "").strip()
+    if name and name != username:
+        return False
+    role = str(
+        data.get("role")
+        or data.get("user_type")
+        or data.get("userType")
+        or ""
+    ).strip().lower()
+    if role in _ADMIN_ROLES:
+        return True
+    groups = data.get("groups") or data.get("group") or []
+    if isinstance(groups, str):
+        groups = [groups]
+    if isinstance(groups, list):
+        normalized = {str(item).strip().lower() for item in groups}
+        if normalized & {"administrators", "admin", "administrator"}:
+            return True
+    return False
+
+
+def _remember_bound_admin(username: str) -> None:
+    data = _load_auth()
+    data["bound_admin"] = username
+    _save_auth(data)
+
+
+def verify_installing_admin(username: str, password: str) -> str:
+    """Prove the caller is a UGOS administrator before the first app password.
+
+    Args:
+        username: UGOS account name.
+        password: UGOS account password. Not stored.
+
+    Returns:
+        The bound administrator username.
+
+    Raises:
+        ValueError: Credentials are missing, rejected, or not an administrator.
+    """
+    user = (username or "").strip()
+    if not user or not password:
+        raise ValueError("NAS administrator sign-in required")
+    from ugos_api_client import UgosApiClient, UgosApiError
+    from ugos_support import default_ugos_host
+
+    try:
+        port = int(os.environ.get("UGOS_API_PORT") or 9443)
+    except (TypeError, ValueError):
+        port = 9443
+    client = UgosApiClient(
+        host=default_ugos_host(),
+        port=port,
+        username=user,
+        password=password,
+        use_https=True,
+        verify_ssl=False,
+    )
+    try:
+        if not client.login():
+            raise ValueError("NAS administrator sign-in failed")
+    except UgosApiError as exc:
+        raise ValueError(f"NAS administrator sign-in failed ({exc})") from exc
+    except Exception as exc:
+        raise ValueError(f"NAS administrator sign-in failed ({exc})") from exc
+    if _current_user_is_admin(getattr(client, "last_login", {}), user):
+        return user
+    for path in (
+        "/ugreen/v1/user/current",
+        "/ugreen/v1/user/info",
+        "/ugreen/v1/user/self",
+    ):
+        try:
+            current = client.get(path)
+        except UgosApiError:
+            continue
+        if _current_user_is_admin(current, user):
+            return user
+    raise ValueError("Only a NAS administrator can set the initial password")
+
+
+def _setup_admin_credentials() -> tuple[str, str]:
+    """Read the encrypted UGOS administrator secret from the setup body.
+
+    Returns:
+        Username and decrypted UGOS password.
+
+    Raises:
+        ValueError: The body is missing the administrator sign-in or sends plaintext.
+    """
+    data = request.get_json(silent=True)
+    if data is None:
+        data = request.form.to_dict() if request.form else {}
+    if not isinstance(data, dict):
+        raise ValueError("NAS administrator sign-in required")
+    if str(data.get("ugos_password") or "").strip():
+        raise ValueError("Plaintext passwords are not accepted")
+    user = str(data.get("ugos_username") or "").strip()
+    enc = str(data.get("ugos_password_enc") or "").strip()
+    if not user or not enc:
+        raise ValueError("NAS administrator sign-in required")
+    try:
+        password = decrypt_oaep(_data_dir(), enc)
+    except Exception as exc:
+        raise ValueError("NAS administrator sign-in failed") from exc
+    return user, password
+
+
 def init_ugos_auth(app: Flask, *, admin_only: bool | None = None) -> None:
     """Protect every route except health/login/crypto/privacy. Idempotent."""
     if getattr(app, "_ugos_auth_inited", False):
@@ -389,13 +531,14 @@ def init_ugos_auth(app: Flask, *, admin_only: bool | None = None) -> None:
             error="",
             title="Set app password" if setup else "Sign in",
             hint=(
-                "First launch: choose a password for this app (stored only on this NAS)."
+                "First launch: sign in with the NAS administrator account that installed this app, then choose an app password. Stored only on this NAS."
                 if setup
                 else "Enter the app password. Direct access without login is not allowed."
             ),
             button="Save password" if setup else "Sign in",
             privacy_url=_privacy_url(),
             needs_consent=_needs_consent(),
+            bind_installer=_REQUIRE_INSTALLER_BIND,
             next_path=nxt,
         )
 
@@ -426,11 +569,32 @@ def init_ugos_auth(app: Flask, *, admin_only: bool | None = None) -> None:
     def ugos_api_login():
         if _needs_consent():
             return jsonify({"ok": False, "error": "privacy_consent_required"}), 403
+        setup = not password_is_set()
+        bound_admin = ""
+        if setup and _REQUIRE_INSTALLER_BIND:
+            from rate_limit import allow as rate_allow
+
+            ip = request.remote_addr or ""
+            if not rate_allow("installer-setup", ip, max_n=8, window_sec=600):
+                return jsonify({"ok": False, "error": "Too many attempts, try later"}), 429
+            try:
+                ugos_user, ugos_pw = _setup_admin_credentials()
+                bound_admin = verify_installing_admin(ugos_user, ugos_pw)
+            except ValueError as ex:
+                msg = str(ex)
+                allowed = msg in _SETUP_ERRORS or any(
+                    msg.startswith(prefix) for prefix in _SETUP_ERRORS
+                )
+                if not allowed:
+                    msg = "NAS administrator sign-in failed"
+                code = 400 if msg.startswith(
+                    ("NAS administrator sign-in required", "Plaintext passwords are not accepted")
+                ) else 403
+                return jsonify({"ok": False, "error": msg}), code
         try:
             pw, pw2 = _passwords_from_body()
         except Exception as ex:
             return jsonify({"ok": False, "error": str(ex)}), 400
-        setup = not password_is_set()
         if setup:
             if len(pw) < 8:
                 return jsonify({"ok": False, "error": "Password too short"}), 400
@@ -439,6 +603,8 @@ def init_ugos_auth(app: Flask, *, admin_only: bool | None = None) -> None:
             if not pw2:
                 return jsonify({"ok": False, "error": "Confirm password required"}), 400
             set_password(pw)
+            if bound_admin:
+                _remember_bound_admin(bound_admin)
             sid = _issue_session()
             return jsonify({"ok": True, "setup": True, "auth_id_len": len(sid)})
         if not verify_password(pw):

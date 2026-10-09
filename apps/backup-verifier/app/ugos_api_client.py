@@ -78,6 +78,7 @@ class UgosApiClient:
         self.base_url = f"{self.scheme}://{self.host}:{self.port}"
         self.verify_ssl = bool(verify_ssl)
         self.token = (token or "").strip()
+        self.last_login: dict[str, Any] = {}
 
     def _ctx(self) -> ssl.SSLContext | None:
         if self.scheme != "https":
@@ -165,6 +166,7 @@ class UgosApiClient:
         if data.get("code") != 200:
             msg = data.get("msg") or data.get("debug") or data.get("code")
             raise UgosApiError(f"UGOS-Login abgelehnt: {msg}")
+        self.last_login = data if isinstance(data, dict) else {}
         tok = (data.get("data") or {}).get("token") if isinstance(data.get("data"), dict) else None
         if not tok:
             raise UgosApiError("Login OK, aber kein Token in der Antwort.")

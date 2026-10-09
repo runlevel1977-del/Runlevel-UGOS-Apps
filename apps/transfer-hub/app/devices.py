@@ -275,9 +275,7 @@ def list_local_dirs(volume_id: str, subpath: str) -> list[dict[str, str]]:
     try:
         real_target = target.resolve()
         mount = resolve_local_path(volume_id, "").resolve()
-        if not str(real_target).startswith(str(mount)):
-            append_log(f"browse: path traversal rejected: {target}")
-            return []
+        real_target.relative_to(mount)
     except (OSError, ValueError):
         return []
     target = real_target

@@ -28,8 +28,18 @@ def _env_bool(name: str, default: bool = True) -> bool:
     return raw in ("1", "true", "yes", "on")
 
 
+def _looks_like_ipv4(token: str) -> bool:
+    parts = token.split(".")
+    if len(parts) != 4:
+        return False
+    try:
+        return all(0 <= int(part) <= 255 for part in parts)
+    except ValueError:
+        return False
+
+
 def _detect_lan_host() -> str:
-    """Best-effort NAS IP when container uses bridge network."""
+    """Best-effort NAS host IP from inside a Docker bridge container."""
     try:
         proc = subprocess.run(
             ["ip", "-4", "route", "get", "1.1.1.1"],
@@ -37,9 +47,25 @@ def _detect_lan_host() -> str:
             text=True,
             timeout=3,
         )
-        for tok in (proc.stdout or "").split():
-            if tok.count(".") == 3 and tok[0].isdigit():
-                return tok
+        parts = (proc.stdout or "").split()
+        if "via" in parts:
+            idx = parts.index("via") + 1
+            if idx < len(parts) and _looks_like_ipv4(parts[idx]):
+                return parts[idx]
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    try:
+        proc = subprocess.run(
+            ["ip", "-4", "route", "show", "default"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        parts = (proc.stdout or "").split()
+        if "via" in parts:
+            idx = parts.index("via") + 1
+            if idx < len(parts) and _looks_like_ipv4(parts[idx]):
+                return parts[idx]
     except (OSError, subprocess.TimeoutExpired):
         pass
     return ""
