@@ -162,12 +162,33 @@ def ugos_volumes_to_snapshot(volume_usage: list[dict[str, Any]]) -> list[dict[st
     return sorted(rows, key=lambda r: mount_sort_key(str(r["path"])))
 
 
+def _ugos_volume_is_real(row: dict[str, Any]) -> bool:
+    """Skip empty / placeholder UGOS rows — only keep volumes that actually exist."""
+    try:
+        total = int(row.get("total_1k") or 0)
+    except (TypeError, ValueError):
+        total = 0
+    if total > 0:
+        return True
+    try:
+        pct = float(row.get("pct") or -1)
+    except (TypeError, ValueError):
+        pct = -1
+    # Some APIs report % without byte totals; still accept a sane used %
+    return 0 <= pct <= 100
+
+
 def merge_volumes(
     host_vols: list[dict[str, Any]], ugos_vols: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Host ``df`` rows are canonical; UGOS only refreshes used % (no extra rows)."""
+    """Merge host ``df`` with UGOS volume list.
+
+    - Host rows stay canonical for paths present locally.
+    - UGOS may add further *real* volumes (e.g. /volume3+) that are not bind-mounted
+      into the container — but never invent empty placeholders.
+    """
     if not host_vols:
-        return ugos_vols
+        return [dict(u) for u in ugos_vols if _ugos_volume_is_real(u)]
     if not ugos_vols:
         return host_vols
     by_path: dict[str, dict[str, Any]] = {}
@@ -181,6 +202,8 @@ def merge_volumes(
             continue
         cur = by_path.get(key)
         if not cur:
+            if _ugos_volume_is_real(u):
+                by_path[key] = dict(u)
             continue
         if u.get("pct") is not None:
             cur["pct"] = u["pct"]

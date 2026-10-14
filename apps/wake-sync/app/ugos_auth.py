@@ -73,11 +73,13 @@ _LOGIN_HTML = """<!DOCTYPE html>
   <form class="box" id="login-form" style="display: {{ 'none' if needs_consent else 'block' }};">
     <h1>{{ title }}</h1>
     <p>{{ hint }}</p>
-    {% if setup and bind_installer %}
+    {% if setup %}
+    {% if bind_installer %}
     <label>NAS administrator</label>
     <input id="ugos-user" required autocomplete="username"/>
     <label>NAS administrator password</label>
     <input type="password" id="ugos-pw" required autocomplete="current-password"/>
+    {% endif %}
     <label>New password</label>
     <input type="password" id="pw" required minlength="8" autocomplete="new-password"/>
     <label>Confirm password</label>
@@ -142,12 +144,16 @@ _LOGIN_HTML = """<!DOCTYPE html>
         const pw = document.getElementById('pw').value;
         const body = {password_enc: await encryptSecret(pw)};
         if (setup) {
-          const pw2 = document.getElementById('pw2').value;
+          const pw2el = document.getElementById('pw2');
+          if (!pw2el) throw new Error('Confirm password field missing');
           if (bindInstaller) {
-            body.ugos_username = document.getElementById('ugos-user').value;
-            body.ugos_password_enc = await encryptSecret(document.getElementById('ugos-pw').value);
+            const u = document.getElementById('ugos-user');
+            const up = document.getElementById('ugos-pw');
+            if (!u || !up) throw new Error('NAS administrator fields missing');
+            body.ugos_username = u.value;
+            body.ugos_password_enc = await encryptSecret(up.value);
           }
-          body.password2_enc = await encryptSecret(pw2);
+          body.password2_enc = await encryptSecret(pw2el.value);
         }
         const r = await fetch('/api/login', {
           method: 'POST',

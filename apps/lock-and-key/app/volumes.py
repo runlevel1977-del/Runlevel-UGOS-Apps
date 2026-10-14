@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Local NAS volume mounts."""
+"""Local NAS volume mounts — every real /volumeN plus granted UGOS folders."""
 from __future__ import annotations
 
 import os
@@ -8,13 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from usb_storage import discover_usb_mounts
+from volume_discover import discover_pool_volumes, discover_ugos_folder_mounts
 
-_UGOS = Path(os.environ.get("NAS_UGOS_MOUNT", "/mnt/ugos"))
-_VOL1 = Path(os.environ.get("NAS_VOL1_MOUNT", "/mnt/vol1"))
-_VOL2 = Path(os.environ.get("NAS_VOL2_MOUNT", "/mnt/vol2"))
 _USB_ROOT = Path(os.environ.get("NAS_USB_MOUNT", "/mnt/@usb"))
 _USB_PREFIX = "usb-"
-_VOLUME_KEYS = {"1": "volume.1", "2": "volume.2", "ugos": "volume.ugos"}
 
 
 def usb_root() -> Path:
@@ -26,11 +23,9 @@ def usb_volume_id(mount_path: Path) -> str:
 
 
 def _configured_volumes() -> list[tuple[str, Path, str]]:
-    return [
-        ("1", _VOL1, "/volume1"),
-        ("2", _VOL2, "/volume2"),
-        ("ugos", _UGOS, os.environ.get("NAS_DATA_ROOT_HOST", "UGOS selection")),
-    ]
+    rows = discover_pool_volumes()
+    rows.extend(discover_ugos_folder_mounts())
+    return rows
 
 
 def _usb_volume_id(mount_path: Path, usb_root: Path) -> str:
@@ -42,6 +37,20 @@ def _usb_volume_id(mount_path: Path, usb_root: Path) -> str:
     slug = slug.replace("/", "__")
     slug = re.sub(r"[^\w.\-]+", "_", slug).strip("._") or "device"
     return f"{_USB_PREFIX}{slug}"
+
+
+def _pool_label(vid: str, lng: str) -> str:
+    from i18n import t
+
+    if vid == "ugos" or vid.startswith("ugos"):
+        return t("volume.ugos", lng)
+    if vid.isdigit():
+        key = f"volume.{vid}"
+        labeled = t(key, lng)
+        if labeled and labeled != key:
+            return labeled
+        return t("volume.storage_fallback", lng, id=vid)
+    return t("volume.storage_fallback", lng, id=vid)
 
 
 def list_volumes() -> list[dict[str, Any]]:
@@ -63,7 +72,7 @@ def list_volumes() -> list[dict[str, Any]]:
         out.append(
             {
                 "id": vid,
-                "label": t(_VOLUME_KEYS.get(vid, "volume.storage_fallback"), lng, id=vid),
+                "label": _pool_label(vid, lng),
                 "mount": str(mount),
                 "host_path": host_hint,
                 "kind": "pool",
@@ -81,8 +90,10 @@ def list_volumes() -> list[dict[str, Any]]:
         seen.add(key)
         name = (row.get("model") or mp.name or "?").strip()
         size = (row.get("size") or "").strip()
-        label = t("volume.usb_fmt", lng, name=name, size=size) if size and size != "—" else t(
-            "volume.usb_name_fmt", lng, name=name
+        label = (
+            t("volume.usb_fmt", lng, name=name, size=size)
+            if size and size != "—"
+            else t("volume.usb_name_fmt", lng, name=name)
         )
         out.append(
             {
@@ -105,10 +116,14 @@ def list_volumes() -> list[dict[str, Any]]:
 
 def normalize_volume_id(volume_id: str | None) -> str:
     v = (volume_id or "").strip()
-    if v in ("1", "2", "ugos"):
+    known = {row[0] for row in _configured_volumes()}
+    if v in known:
         return v
     if v.startswith(_USB_PREFIX):
         return v
+    pools = discover_pool_volumes()
+    if pools:
+        return pools[0][0]
     return "1"
 
 
@@ -144,10 +159,10 @@ def resolve_local_path(volume_id: str, subpath: str) -> Path:
 
 
 def seal_scan_roots() -> list[tuple[str, Path]]:
-    """Volume id + mount for discovering sealed folders (Volume 1/2 only)."""
+    """All real pool volumes (any N) for discovering sealed folders."""
     out: list[tuple[str, Path]] = []
-    for vid, mount, _ in _configured_volumes():
-        if vid in ("1", "2") and mount.is_dir():
+    for vid, mount, _ in discover_pool_volumes():
+        if mount.is_dir():
             out.append((vid, mount))
     return out
 

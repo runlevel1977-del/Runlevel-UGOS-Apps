@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Local NAS volume mounts (read-only in compose)."""
+"""Local NAS mounts for Wake & Sync — granted folders (+ optional real pools)."""
 from __future__ import annotations
 
 import os
@@ -8,34 +8,30 @@ from pathlib import Path
 from typing import Any
 
 from usb_storage import discover_usb_mounts
+from volume_discover import discover_pool_volumes, discover_ugos_folder_mounts
 
-_UGOS = Path(os.environ.get("NAS_UGOS_MOUNT", "/mnt/ugos"))
-_VOL1 = Path(os.environ.get("NAS_VOL1_MOUNT", "/mnt/vol1"))
-_VOL2 = Path(os.environ.get("NAS_VOL2_MOUNT", "/mnt/vol2"))
-_HOME = Path(os.environ.get("NAS_HOME_MOUNT", "/mnt/home"))
 _USB_ROOT = Path(os.environ.get("NAS_USB_MOUNT", "/mnt/@usb"))
-
-_VOLUME_KEYS = {
-    "1": "volume.1",
-    "2": "volume.2",
-    "ugos": "volume.ugos",
-    "home": "volume.home",
-}
 _USB_PREFIX = "usb-"
-_KNOWN_POOL_IDS = frozenset({"1", "2", "ugos", "home"})
 
 
 def _configured_volumes() -> list[tuple[str, Path, str]]:
-    return [
-        ("1", _VOL1, "/volume1"),
-        ("2", _VOL2, "/volume2"),
-        (
-            "ugos",
-            _UGOS,
-            os.environ.get("NAS_DATA_ROOT_HOST", "UGOS selection"),
-        ),
-        ("home", _HOME, "/home"),
-    ]
+    rows: list[tuple[str, Path, str]] = []
+    # Real pool mounts only when present in the container (pid:host → /proc/1/root).
+    # Never invent empty Volume 3+ placeholders.
+    rows.extend(discover_pool_volumes())
+    rows.extend(discover_ugos_folder_mounts())
+    out: list[tuple[str, Path, str]] = []
+    seen: set[str] = set()
+    for vid, mount, hint in rows:
+        try:
+            key = str(mount.resolve())
+        except OSError:
+            key = f"{vid}:{mount}"
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append((vid, mount, hint))
+    return out
 
 
 def _usb_volume_id(mount_path: Path, usb_root: Path) -> str:
@@ -69,6 +65,25 @@ def _usb_label(meta: dict[str, Any], lng: str) -> str:
     return t("volume.usb_name_fmt", lng, name=name)
 
 
+def _pool_label(vid: str, host_hint: str, lng: str) -> str:
+    from i18n import t
+
+    if vid == "ugos" or vid.startswith("ugos"):
+        base = t("volume.ugos", lng)
+        hint = (host_hint or "").strip()
+        if vid == "ugos" or not hint:
+            return base
+        short = hint.rstrip("/").split("/")[-1] or hint
+        return f"{base} ({short})"
+    if vid.isdigit():
+        key = f"volume.{vid}"
+        labeled = t(key, lng)
+        if labeled and labeled != key:
+            return labeled
+        return f"Volume {vid}"
+    return f"Volume {vid}"
+
+
 def list_volumes() -> list[dict[str, Any]]:
     from i18n import get_lang, t
 
@@ -88,7 +103,7 @@ def list_volumes() -> list[dict[str, Any]]:
         out.append(
             {
                 "id": vid,
-                "label": t(_VOLUME_KEYS.get(vid, "volume.storage_fallback"), lng, id=vid),
+                "label": _pool_label(vid, host_hint, lng),
                 "mount": str(mount),
                 "host_path": host_hint,
                 "kind": "pool",
@@ -126,20 +141,20 @@ def list_volumes() -> list[dict[str, Any]]:
 def volume_label(volume_id: str) -> str:
     from i18n import get_lang, t
 
-    vid = volume_id or "1"
+    vid = volume_id or "ugos"
     for v in list_volumes():
         if v["id"] == vid:
             return v["label"]
     if vid.startswith(_USB_PREFIX):
         slug = vid[len(_USB_PREFIX) :].replace("__", "/")
         return t("volume.usb_name_fmt", get_lang(), name=slug)
-    return t(_VOLUME_KEYS.get(vid, "volume.storage_fallback"), get_lang(), id=vid)
+    return _pool_label(vid, "", get_lang())
 
 
 def resolve_local_path(volume_id: str, subpath: str) -> Path:
     from i18n import get_lang, t
 
-    vid = (volume_id or "1").strip() or "1"
+    vid = (volume_id or "ugos").strip() or "ugos"
     rel = (subpath or "").strip().strip("/")
 
     if vid.startswith(_USB_PREFIX):
@@ -161,11 +176,18 @@ def resolve_local_path(volume_id: str, subpath: str) -> Path:
 
 def normalize_volume_id(volume_id: str | None) -> str:
     v = (volume_id or "").strip()
-    if v in _KNOWN_POOL_IDS:
+    known = {row[0] for row in _configured_volumes()}
+    if v in known:
         return v
     if v.startswith(_USB_PREFIX):
         for vid, mount, _, _ in _configured_usb_volumes():
             if vid == v and mount.is_dir():
                 return v
         return v
-    return "1"
+    if known:
+        # Prefer ugos* then lowest pool id
+        ug = sorted(x for x in known if x.startswith("ugos"))
+        if ug:
+            return ug[0]
+        return sorted(known, key=lambda x: (not x.isdigit(), int(x) if x.isdigit() else x))[0]
+    return "ugos"

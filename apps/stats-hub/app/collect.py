@@ -24,6 +24,23 @@ _USB_HINT = re.compile(
     re.I,
 )
 _VOL_ROOT = re.compile(r"^/volume\d+$", re.I)
+_PROC_VOL = re.compile(r"^/proc/1/root(/volume\d+)$", re.I)
+_MNT_VOL = re.compile(r"^/mnt/vol(\d+)$", re.I)
+
+
+def normalize_dashboard_mount(mp: str) -> str:
+    """Map container-specific volume paths back to host-style /volumeN."""
+    raw = str(mp or "").strip()
+    if not raw.startswith("/"):
+        return raw
+    p = posixpath.normpath(raw.rstrip("/") or "/")
+    m = _PROC_VOL.match(p)
+    if m:
+        return m.group(1)
+    m2 = _MNT_VOL.match(p)
+    if m2:
+        return f"/volume{m2.group(1)}"
+    return p
 
 
 def _run(cmd: str, timeout: int = 30) -> str:
@@ -65,7 +82,7 @@ def is_dashboard_mount(mp: str) -> bool:
     raw = str(mp or "").strip()
     if not raw.startswith("/"):
         return False
-    p = posixpath.normpath(raw.rstrip("/") or "/")
+    p = normalize_dashboard_mount(raw)
     if p == "/":
         return True
     if _VOL_ROOT.match(p):
@@ -144,13 +161,16 @@ def parse_volumes(df_text: str) -> list[dict[str, Any]]:
         parts = line.split()
         if len(parts) < 6:
             continue
-        mp = posixpath.normpath((parts[-1] or "/").rstrip("/") or "/")
+        mp = normalize_dashboard_mount((parts[-1] or "/").rstrip("/") or "/")
         if not is_dashboard_mount(mp):
             continue
+        # Drop empty stub mounts (e.g. docker-created empty /volumeN)
         try:
             total_1k = int(parts[-5])
             used_1k = int(parts[-4])
         except (ValueError, IndexError):
+            continue
+        if total_1k <= 0 and _VOL_ROOT.match(mp):
             continue
         pct_s = str(parts[-2] or "").strip()
         if pct_s.endswith("%"):
@@ -505,8 +525,34 @@ done 2>/dev/null
 """
 
 
+def _discover_volume_df_targets() -> list[str]:
+    """Real /volumeN paths only (bind mounts or host pid namespace) — no empty stubs."""
+    try:
+        from volume_discover import discover_pool_volumes
+
+        return [str(p) for _vid, p, _hint in discover_pool_volumes()]
+    except Exception:
+        out: list[str] = []
+        for i in range(1, 33):
+            for cand in (f"/volume{i}", f"/proc/1/root/volume{i}", f"/mnt/vol{i}"):
+                try:
+                    st = os.stat(cand)
+                    pst = os.stat(os.path.dirname(cand.rstrip("/") or "/"))
+                    if os.path.isdir(cand) and st.st_dev != pst.st_dev:
+                        out.append(cand)
+                        break
+                except OSError:
+                    continue
+        return out
+
+
 def collect_df_block() -> str:
-    """Same df logic as NAS Admin dashboard_monitor_loop."""
+    """Same df logic as NAS Admin dashboard_monitor_loop — all real volumes."""
+    vol_targets = _discover_volume_df_targets()
+    vol_df = ""
+    if vol_targets:
+        joined = " ".join(shlex.quote(p) for p in vol_targets)
+        vol_df = f"df -P {joined} 2>/dev/null | tail -n +2 || true\n"
     cmd = (
         "df -P 2>/dev/null | tail -n +2\n"
         "[ -d /mnt/@usb ] && df -P /mnt/@usb 2>/dev/null | tail -n +2 || true\n"
@@ -516,11 +562,11 @@ def collect_df_block() -> str:
         "command -v findmnt >/dev/null 2>&1 && findmnt -rn -o TARGET 2>/dev/null | "
         'while IFS= read -r _ug_m; do '
         '[ -z "$_ug_m" ] && continue; '
-        'case "$_ug_m" in /|/mnt/dm-*|/volume[0-9]) continue ;; esac; '
+        'case "$_ug_m" in /|/mnt/dm-*|/volume[0-9]|/volume[0-9][0-9]) continue ;; esac; '
         'printf %s "$_ug_m" | grep -Eqi \'@usb|volumeusb|/media/|usb|removabledisk\' || continue; '
         'df -P "$_ug_m" 2>/dev/null | tail -n +2 || true; '
         "done\n"
-        "df -P /volume1 /volume2 2>/dev/null | tail -n +2 || true\n"
+        f"{vol_df}"
     )
     # Keep short: during Transfer Hub / heavy I/O, long df can stall the monitor.
     return _run(cmd, timeout=8)
@@ -550,8 +596,25 @@ def _docker_container_dirs() -> list[str]:
     roots: list[str] = []
     if extra:
         roots.append(extra)
-    roots.extend(("/volume1/@docker/containers", "/volume2/@docker/containers"))
-    return [p for p in roots if os.path.isdir(p)]
+    for base in _discover_volume_df_targets():
+        roots.append(f"{base.rstrip('/')}/@docker/containers")
+    # Fallbacks when discovery is empty (legacy binds)
+    roots.extend(
+        (
+            "/volume1/@docker/containers",
+            "/volume2/@docker/containers",
+            "/proc/1/root/volume1/@docker/containers",
+            "/proc/1/root/volume2/@docker/containers",
+        )
+    )
+    out: list[str] = []
+    seen: set[str] = set()
+    for p in roots:
+        if p in seen or not os.path.isdir(p):
+            continue
+        seen.add(p)
+        out.append(p)
+    return out
 
 
 def _read_json_file(path: str) -> dict[str, Any] | None:
@@ -1446,7 +1509,7 @@ def collect_os_info() -> dict[str, str]:
 
 
 def scan_top_folders(bases: list[str] | None = None, depth: int = 2, limit: int = 20) -> list[dict[str, Any]]:
-    bases = bases or ["/volume1", "/volume2"]
+    bases = bases or _discover_volume_df_targets() or ["/volume1", "/volume2"]
     existing = [b for b in bases if os.path.isdir(b)]
     if not existing:
         return []

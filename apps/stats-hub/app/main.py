@@ -124,7 +124,7 @@ def api_top_scan():
     def worker():
         global _top_busy
         try:
-            append_log("TOP scan start (volume1+2, depth 2)")
+            append_log("TOP scan start (all real volumes, depth 2)")
             rows = scan_top_folders()
             set_top_folders(rows, scanning=False)
             append_log(f"TOP scan done: {len(rows)} rows")

@@ -45,7 +45,7 @@ from wol import broadcast_for_ip, send_wol, wol_broadcast, wol_source_ips
 
 app = Flask(__name__)
 init_ugos_auth(app)
-APP_VERSION = os.environ.get("WAKE_SYNC_VERSION", "0.1.47")
+APP_VERSION = os.environ.get("WAKE_SYNC_VERSION", "0.1.45")
 APP_PORT = int(os.environ.get("WAKE_SYNC_PORT", "29120"))
 NAS_ADMIN_URL = os.environ.get(
     "NAS_ADMIN_URL",
