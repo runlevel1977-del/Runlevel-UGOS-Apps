@@ -26,12 +26,17 @@ from devices import (
     load_devices,
     test_smb,
 )
-from jobs import list_active_jobs, start_profile_run, start_scheduler
+from jobs import (
+    assert_profile_routes_inside,
+    list_active_jobs,
+    start_profile_run,
+    start_scheduler,
+)
 from icon_sync import sync_appcenter_icon
 from i18n import LANG_COOKIE, LANG_LABELS, bundle, get_lang, lang_from_request, normalize_lang, t
 from network_scan import probe_host, scan_config, scan_lan
 from schedule_util import normalize_schedule_fields, schedule_label
-from volumes import list_volumes
+from volumes import OutsideVolumeError, list_volumes
 from store import (
     DATA_DIR,
     append_log,
@@ -45,7 +50,7 @@ from store import (
 app = Flask(__name__)
 init_ugos_auth(app)
 NAS_MOUNT = os.environ.get("NAS_MOUNT", "/mnt/nas")
-APP_VERSION = os.environ.get("TRANSFER_HUB_VERSION", "0.6.35")
+APP_VERSION = os.environ.get("TRANSFER_HUB_VERSION", "0.6.40")
 NAS_ADMIN_URL = os.environ.get(
     "NAS_ADMIN_URL",
     "https://github.com/runlevel1977-del/UgreenNASAdmin/releases/latest",
@@ -155,6 +160,12 @@ def _parse_profile_body(
 
     source = _normalize_endpoint(source_raw)
     dest = _normalize_endpoint(dest_raw)
+    try:
+        assert_profile_routes_inside(source, dest)
+    except OutsideVolumeError:
+        return None, (t("err.path_outside", lng), 400)
+    except ValueError as exc:
+        return None, (str(exc), 400)
     src_err = _validate_source_endpoint(source, lng)
     if src_err:
         return None, (src_err, 400)

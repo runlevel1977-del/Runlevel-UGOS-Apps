@@ -25,6 +25,12 @@ from network_scan import host_smb_reachable
 from path_filters import TRANSFER_EXCLUDE_GLOBS, is_hidden_name
 from schedule_util import profile_due_now
 from store import append_log, load_profiles, save_profiles
+from volumes import (
+    OutsideVolumeError,
+    assert_canonical_under_volume,
+    normalize_volume_id,
+    resolve_local_path,
+)
 
 _running_lock = threading.Lock()
 _running_ids: set[str] = set()
@@ -407,6 +413,40 @@ def expand_transfer_routes(
     return routes
 
 
+def _assert_local_endpoint(ep: dict[str, Any]) -> None:
+    """Reject one local endpoint when its path leaves the selected volume."""
+    device = get_device(ep.get("device_id", LOCAL_ID))
+    if not device or device.get("type") != "local":
+        return
+    vol = normalize_volume_id(ep.get("volume"))
+    for rel in endpoint_path_list(ep):
+        resolve_local_path(vol, rel)
+
+
+def assert_profile_routes_inside(
+    source_ep: dict[str, Any],
+    dest_ep: dict[str, Any],
+) -> None:
+    """Check every expanded local source and destination before save or run.
+
+    Multi-folder sources become one route each. The destination path spelled
+    for that route is checked as well, not only the profile's base folder.
+    """
+    for src, dst in expand_transfer_routes(source_ep, dest_ep):
+        _assert_local_endpoint(src)
+        _assert_local_endpoint(dst)
+
+
+def _canonical_local_route(ep: dict[str, Any], parsed: str) -> Path:
+    """Force-check a parsed local path against the endpoint's volume root.
+
+    ``parsed`` is the filesystem result of ``rclone_remote_url``. The check
+    uses the path after symlink normalization.
+    """
+    vol = normalize_volume_id(ep.get("volume"))
+    return assert_canonical_under_volume(vol, parsed)
+
+
 def _parse_progress_line(line: str) -> dict[str, Any] | None:
     m = _RCLONE_STAT.search(line)
     if m:
@@ -520,7 +560,7 @@ def _remove_empty_dirs(root: Path) -> None:
 
 def _cleanup_local_move_source(src_ep: dict[str, Any], lng: str) -> tuple[bool, str]:
     """Remove transferred files on local NAS paths (no rclone needed)."""
-    src = Path(rclone_remote_url(src_ep)).resolve()
+    src = _canonical_local_route(src_ep, rclone_remote_url(src_ep))
     if not src.is_dir():
         return True, ""
     errors: list[str] = []
@@ -600,6 +640,8 @@ def _run_rsync_between_paths(
     move: bool = False,
 ) -> tuple[bool, str]:
     lng = resolve_lang()
+    src = _canonical_local_route(src_ep, os.fspath(src))
+    dst = _canonical_local_route(dst_ep, os.fspath(dst))
     if not src.is_dir():
         return False, t("err.source_not_found", lng, path=str(src))
     dst.mkdir(parents=True, exist_ok=True)
@@ -635,8 +677,10 @@ def _run_local_rsync(
     move: bool = False,
 ) -> tuple[bool, str]:
     lng = resolve_lang()
-    src = Path(rclone_remote_url(src_ep)).resolve()
-    dst = Path(rclone_remote_url(dst_ep)).resolve()
+    src_url = rclone_remote_url(src_ep)
+    dst_url = rclone_remote_url(dst_ep)
+    src = _canonical_local_route(src_ep, src_url)
+    dst = _canonical_local_route(dst_ep, dst_url)
     if not move:
         append_log(f"COPY Phase 1/2: rsync -> {endpoint_label(dst_ep)}")
     ok, msg = _run_rsync_between_paths(profile_id, src, dst, src_ep, dst_ep, move=move)
@@ -666,8 +710,12 @@ def _run_rclone_transfer(
     lng = resolve_lang()
     src_url = rclone_remote_url(src_ep)
     dst_url = rclone_remote_url(dst_ep)
+    if not endpoint_uses_smb(src_ep):
+        src_url = str(_canonical_local_route(src_ep, src_url))
     if not endpoint_uses_smb(dst_ep):
-        Path(dst_url).mkdir(parents=True, exist_ok=True)
+        dst_path = _canonical_local_route(dst_ep, dst_url)
+        dst_path.mkdir(parents=True, exist_ok=True)
+        dst_url = str(dst_path)
 
     def _progress(line: str) -> None:
         _on_progress_line(profile_id, line)
@@ -738,9 +786,12 @@ def run_rsync_profile(profile: dict[str, Any]) -> tuple[bool, str]:
     lng = get_lang()
 
     try:
+        assert_profile_routes_inside(src_ep, dst_ep)
         last_msg = ""
         for idx, (src, dst) in enumerate(routes, start=1):
             route_note = f"{idx}/{total}"
+            _assert_local_endpoint(src)
+            _assert_local_endpoint(dst)
             _set_job(pid, detail=route_note, percent=int(((idx - 1) / max(total, 1)) * 100))
             if use_rclone:
                 perf_note = " | SMB Performance" if smb_performance else ""
@@ -771,6 +822,11 @@ def run_rsync_profile(profile: dict[str, Any]) -> tuple[bool, str]:
         _set_job(pid, status="ok", percent=100, message=done_msg)
         append_log(f"OK {profile.get('name')}\n{done_msg}")
         return True, done_msg
+    except OutsideVolumeError:
+        msg = t("err.path_outside", lng)
+        _set_job(pid, status="error", message=msg)
+        append_log(f"FAIL {profile.get('name')} {msg}")
+        return False, msg
     except Exception as e:
         _set_job(pid, status="error", message=str(e)[:500])
         append_log(f"FAIL {profile.get('name')} {e}")
@@ -844,6 +900,15 @@ def start_profile_run(profile_id: str) -> tuple[bool, str]:
     profile = next((p for p in profiles if p.get("id") == profile_id), None)
     if not profile:
         return False, t("err.profile_not_found", get_lang())
+    try:
+        assert_profile_routes_inside(
+            _normalize_endpoint(profile.get("source")),
+            _normalize_endpoint(profile.get("dest")),
+        )
+    except OutsideVolumeError:
+        return False, t("err.path_outside", get_lang())
+    except ValueError as exc:
+        return False, str(exc)
     with _running_lock:
         if profile_id in _running_ids:
             return False, t("jobs.already_running", get_lang())

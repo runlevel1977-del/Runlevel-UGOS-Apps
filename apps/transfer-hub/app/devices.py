@@ -16,7 +16,14 @@ from typing import Any, Iterator
 from path_filters import is_hidden_name, parse_smbclient_ls_line
 from secret_box import decrypt_secret, encrypt_secret
 from store import DATA_DIR, append_log, new_profile_id
-from volumes import list_volumes, normalize_volume_id, resolve_local_path, volume_label
+from volumes import (
+    OutsideVolumeError,
+    assert_canonical_under_volume,
+    list_volumes,
+    normalize_volume_id,
+    resolve_local_path,
+    volume_label,
+)
 
 DEVICES_FILE = DATA_DIR / "devices.json"
 LOCAL_ID = "local"
@@ -270,15 +277,11 @@ def list_local_volume_picker() -> list[dict[str, str]]:
 def list_local_dirs(volume_id: str, subpath: str) -> list[dict[str, str]]:
     try:
         target = resolve_local_path(volume_id, subpath)
+    except OutsideVolumeError:
+        append_log("browse: path outside selected volume rejected")
+        return []
     except ValueError:
         return []
-    try:
-        real_target = target.resolve()
-        mount = resolve_local_path(volume_id, "").resolve()
-        real_target.relative_to(mount)
-    except (OSError, ValueError):
-        return []
-    target = real_target
     if not target.is_dir():
         return []
     rel = (subpath or "").strip().strip("/")
@@ -410,7 +413,8 @@ def rclone_remote_url(ep: dict[str, Any]) -> str:
         raise ValueError("Gerät nicht gefunden")
     if device.get("type") == "local":
         vol = normalize_volume_id(ep.get("volume"))
-        return str(resolve_local_path(vol, ep.get("path") or "").resolve())
+        parsed = resolve_local_path(vol, ep.get("path") or "")
+        return str(assert_canonical_under_volume(vol, parsed))
     if device.get("type") == "smb":
         share = validate_smb_share(ep.get("share") or "")
         host = _conn_value(validate_smb_host(str(device.get("host") or "")))
