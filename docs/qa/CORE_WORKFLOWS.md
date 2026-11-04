@@ -151,7 +151,7 @@ Native app — Docker is **not** required.
 
 | Step | Action | Expected |
 | --- | --- | --- |
-| 1 | Install; grant Volume 1 folder(s); restart if prompted | App opens as a desktop window (port 21010) |
+| 1 | Install; grant Volume 1 folder(s); restart if prompted | App opens as a desktop window (port 29140) |
 | 2 | Add a local job: source folder → destination folder, copy | Progress shown; files appear at destination |
 | 3 | Backup: source → destination, optional password, run once | `.tar.gz` or `.tar.gz.enc` appears |
 | 4 | Restore into a test folder (enter password if protected) | Folder contents extracted including the original folder name |

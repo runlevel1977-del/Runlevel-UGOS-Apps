@@ -52,7 +52,7 @@ This policy describes personal data processed by Moving Files when installed on 
 
 Installation parameters do not include NAS username, SMB password, or UGOS API password. The app accesses **only** the folders you grant in App Center / Settings, plus the app data directory.
 
-The admin UI talks to the backend over the NAS HTTP proxy. Passwords, usernames, IP addresses, MAC addresses and device IDs are not sent as plaintext: the browser encrypts them with RSA-OAEP (SHA-256) and the server rejects plaintext. **SMB passwords and the backup archive password are not returned on GET `/api/state`.** The UI shows only a `hasPassword` flag. Empty password fields keep the stored secret. Do not expose port 21010 to the public Internet.
+The admin UI talks to the backend over the NAS HTTP proxy. Passwords, usernames, IP addresses, MAC addresses and device IDs are not sent as plaintext: the browser encrypts them with RSA-OAEP (SHA-256) and the server rejects plaintext. **SMB passwords and the backup archive password are not returned on GET `/api/state`.** The UI shows only a `hasPassword` flag. Empty password fields keep the stored secret. Do not expose port 29140 to the public Internet.
 
 On first open the app shows a privacy dialog (**I agree** / **Decline**). Credentials are stored only after Agree. Decline clears stored SMB and backup passwords; local copies still work.
 
